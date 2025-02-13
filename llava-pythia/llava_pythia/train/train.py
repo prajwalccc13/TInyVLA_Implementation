@@ -964,9 +964,6 @@ def train():
     # else:
     #     trainer.train()
 
-    # TODO I dont like auto resume << REMOVE IT AND UNCOMMENT THE ABOVE CODE
-    # print("Total training steps:", trainer.state.total_steps)
-
     trainer.train()
 
     trainer.save_state()

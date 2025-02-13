@@ -54,7 +54,11 @@ class PositionEmbeddingSine(nn.Module):
 
 class PositionEmbeddingLearned(nn.Module):
     """
-    Absolute pos embedding, learned.
+    Computes learned absolute positional embeddings for the input tensor.
+
+    This method generates position embeddings based on the spatial dimensions 
+    (height and width) of the input tensor. The embeddings are learned through 
+    trainable `nn.Embedding` layers for both row (height) and column (width) indices.
     """
     def __init__(self, num_pos_feats=256):
         super().__init__()
@@ -100,10 +104,10 @@ def position_encoding_1d(x):
     pos_enc[:, 1::2] = torch.cos(position * div_term)
 
     return pos_enc.to(x.device)
+
 def build_position_encoding(args):
     N_steps = args.hidden_dim // 2
     if args.position_embedding in ('v2', 'sine'):
-        # TODO find a better way of exposing other arguments
         position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
     elif args.position_embedding in ('v3', 'learned'):
         position_embedding = PositionEmbeddingLearned(N_steps)

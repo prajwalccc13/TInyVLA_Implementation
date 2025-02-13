@@ -73,7 +73,7 @@ class DETRVAE(nn.Module):
             self.backbones = None
 
         # encoder extra parameters
-        self.latent_dim = 32  # final size of latent z # TODO tune
+        self.latent_dim = 32  # final size of latent z
         self.cls_embed = nn.Embedding(1, hidden_dim)  # extra cls token embedding
         self.encoder_action_proj = nn.Linear(action_dim, hidden_dim)  # project action to embedding
         self.encoder_joint_proj = nn.Linear(state_dim, hidden_dim)  # project qpos to embedding
@@ -193,11 +193,19 @@ class DETRVAEHEAD(nn.Module):
                  action_dim):
         """ Initializes the model.
         Parameters:
-            transformer: torch module of the transformer architecture. See transformer.py
-            state_dim: robot state dimension of the environment
-            num_queries: number of object queries, ie detection slot. This is the maximal number of objects
-                         DETR can detect in a single image. For COCO, we recommend 100 queries.
-            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+            backbones (list of torch.nn.Module or None): A list of backbone modules for feature extraction from images.
+                                                         If None, the model relies only on state inputs.
+            transformer (torch.nn.Module): The transformer model that processes the input features.
+            encoder (torch.nn.Module or None): The encoder module used in the CVAE framework. If None, the latent space 
+                                               is not learned.
+            state_dim (int): The dimensionality of the robot's state representation.
+            num_queries (int): The number of object queries (detection slots). This is the maximum number of objects 
+                               DETR can detect in a single image.
+            camera_names (list of str): A list of camera names used in the observation space.
+            vq (bool): Whether to use vector quantization (VQ) for the latent representation.
+            vq_class (int): The number of codebook classes used in vector quantization.
+            vq_dim (int): The dimensionality of each codebook vector in vector quantization.
+            action_dim (int): The dimensionality of the action space.
         """
         super().__init__()
         self.num_queries = num_queries
@@ -210,19 +218,14 @@ class DETRVAEHEAD(nn.Module):
         self.action_head = nn.Linear(hidden_dim, action_dim)
         self.is_pad_head = nn.Linear(hidden_dim, 1)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
-        # if backbones is not None:
-        #     self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1)
-        #     self.backbones = nn.ModuleList(backbones)
-        #     self.input_proj_robot_state = nn.Linear(state_dim, hidden_dim)
-        # else:
-        # input_dim = robot_state + env_state
+
         self.input_proj_robot_state = nn.Linear(state_dim, hidden_dim)
         self.input_proj_env_state = nn.Linear(state_dim, hidden_dim)
         self.pos = torch.nn.Embedding(2, hidden_dim)
         self.backbones = None
 
         # encoder extra parameters
-        self.latent_dim = 32  # final size of latent z # TODO tune
+        self.latent_dim = 32  # final size of latent z
         self.cls_embed = nn.Embedding(1, hidden_dim)  # extra cls token embedding
         self.encoder_action_proj = nn.Linear(action_dim, hidden_dim)  # project action to embedding
         self.encoder_joint_proj = nn.Linear(state_dim, hidden_dim)  # project qpos to embedding
@@ -248,6 +251,7 @@ class DETRVAEHEAD(nn.Module):
         if self.encoder is None:
             latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
             latent_input = self.latent_out_proj(latent_sample)
+            # no encoder, so no latent distribution
             probs = binaries = mu = logvar = None
         else:
             # cvae encoder
@@ -282,16 +286,16 @@ class DETRVAEHEAD(nn.Module):
                     probs_flat = probs.view(-1, self.vq_class * self.vq_dim)
                     straigt_through = binaries_flat - probs_flat.detach() + probs_flat
                     latent_input = self.latent_out_proj(straigt_through)
-                    mu = logvar = None
+                    mu = logvar = None # VQ-VAE does not use mu and logvar
                 else:
-                    probs = binaries = None
+                    probs = binaries = None  # Standard VAE does not use discrete probabilities
                     mu = latent_info[:, :self.latent_dim]
                     logvar = latent_info[:, self.latent_dim:]
                     latent_sample = reparametrize(mu, logvar)
                     latent_input = self.latent_out_proj(latent_sample)
 
             else:
-                mu = logvar = binaries = probs = None
+                mu = logvar = binaries = probs = None # In inference mode, we do not need the latent variables or VQ probabilities
                 if self.vq:
                     latent_input = self.latent_out_proj(vq_sample.view(-1, self.vq_class * self.vq_dim))
                 else:
@@ -338,7 +342,7 @@ class CNNMLP(nn.Module):
         """
         super().__init__()
         self.camera_names = camera_names
-        self.action_head = nn.Linear(1000, state_dim)  # TODO add more
+        self.action_head = nn.Linear(1000, state_dim)
         if backbones is not None:
             self.backbones = nn.ModuleList(backbones)
             backbone_down_projs = []
@@ -399,7 +403,7 @@ def build_encoder(args):
     dropout = args.dropout  # 0.1
     nhead = args.nheads  # 8
     dim_feedforward = args.dim_feedforward  # 2048
-    num_encoder_layers = args.enc_layers  # 4 # TODO shared with VAE decoder
+    num_encoder_layers = args.enc_layers  # 4
     normalize_before = args.pre_norm  # False
     activation = "relu"
 
@@ -414,10 +418,13 @@ def build_encoder(args):
 def build(args):
     state_dim = IN_DIM_STATE
 
-    # From state
-    # backbone = None # from state for now, no need for conv nets
-    # From image
+    # From state: No image processing needed, state information is used directly
+    # backbone = None
+
+    # From image: Image data requires processing through backbones (feature extraction networks)
+
     backbones = []
+    # Build and append the backbone for each camera in the input list
     for _ in args.camera_names:
         backbone = build_backbone(args)
         backbones.append(backbone)
@@ -451,12 +458,11 @@ def build_vae_head(args):
     from detr.models.transformer import Transformer
     state_dim = IN_DIM_STATE
 
-    # encoder = build_encoder(args)
     d_model = args['hidden_dim']  # 256
     dropout = args['dropout']  # 0.1
     nhead = args['nheads']  # 8
     dim_feedforward = args['dim_feedforward']  # 2048
-    num_encoder_layers = args['enc_layers']  # 4 # TODO shared with VAE decoder
+    num_encoder_layers = args['enc_layers']  # 4
     normalize_before = args['pre_norm']  # False
     activation = "relu"
 
@@ -479,7 +485,7 @@ def build_vae_head(args):
     model = DETRVAEHEAD(
         transformer,
         encoder,
-        state_dim=state_dim,
+        state_dim,
         num_queries=args['chunk_size'],
         camera_names=args['camera_names'],
         vq=False,
@@ -494,7 +500,7 @@ def build_cnnmlp(args):
     state_dim = IN_DIM_STATE
 
     # From state
-    # backbone = None # from state for now, no need for conv nets
+    # backbone = None
     # From image
     backbones = []
     for _ in args.camera_names:
