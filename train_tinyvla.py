@@ -1,6 +1,6 @@
 
 import pickle
-
+import sys
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -24,33 +24,29 @@ from llava_pythia.model.language_model.pythia.llava_pythia import LlavaPythiaCon
 local_rank = None
 
 #  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>parameters<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
 @dataclass
-class ActionHeadArguments:
-    multi_step_action: int = 1
+class ActionArguments:
+    action_head_type: str = field(default="droid_diffusion") # action head type, 'act', 'droid_diffusion'
+    action_dim: int = field(default=10)
+    state_dim: int = field(default=7)
+    chunk_size: int = field(default=16) # size of action chunk, same as mobile aloha
 
 @dataclass
 class ModelArguments:
-    action_head_type: str = field(default="act") # action head type, 'act', 'unet'
-
     model_name_or_path: Optional[str] = field(default="facebook/opt-125m") # equals to base model path when set load_pretrain=True
     version: Optional[str] = field(default="v0")
-
     mm_use_im_start_end: bool = field(default=False)
     mm_use_im_patch_token: bool = field(default=True)
 
     concat: str = field(default="None")
-    policy_class: str = field(default="droid_diffusion")
-
 
 @dataclass
 class DataArguments:
     lazy_preprocess: bool = False
     is_multimodal: bool = False
     image_aspect_ratio: str = 'square'
-    task_name: str = field(default="stack_cube_2024_6_2")
-    skip_mirrored_data: bool = field(default=False)
-    chunk_size: int = field(default=50)
+    task_name: str = field(default="example_task_config") # task name used for training, which is the key in aloha_scripts/constants.py
+    skip_mirrored_data: bool = field(default=True)
 
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
@@ -61,41 +57,42 @@ class TrainingArguments(transformers.TrainingArguments):
     adam_epsilon: float = field(default=1e-7)
     remove_unused_columns: bool = field(default=False)
 
-    freeze_vision_tower: bool = field(default=False)
-    freeze_backbone: bool = field(default=False)
+    freeze_vision_tower: bool = field(default=False) # whether to freeze vit in VLM or not
+    freeze_backbone: bool = field(default=False) # whether to freeze LLM in VLM or not
     tune_mm_mlp_adapter: bool = field(default=False)
 
     # logger
-    logging_dir: str = field(default='./logs')  # TensorBoard日志的保存目录
-    logging_strategy: str = field(default='steps')  # 设置为`steps`表示每几步记录一次日志
+    logging_dir: str = field(default='./logs')  # TensorBoard
+    logging_strategy: str = field(default='steps')
     logging_steps: int = field(default=10)
 
-    save_steps: int = field(default=10)  # 每隔多少步保存一次模型
+    save_steps: int = field(default=10)  # interval for saving checkpoint
     num_train_epochs: int = field(default=3)
-    max_steps: int = field(default=5000)
+    max_steps: int = field(default=5000) # maxmium training steps
     seed: int = field(default=0)
 
     # validate
-    do_eval: bool = field(default=True)
-    evaluation_strategy: str = field(default="steps")
-    eval_steps: int = field(default=200)
-    per_device_eval_batch_size: int = field(default=32)
+    do_eval: bool = field(default=False) # unused
+    evaluation_strategy: str = field(default="steps") # unused
+    eval_steps: int = field(default=200) # unused
+    per_device_eval_batch_size: int = field(default=32) # batch size per device
 
     # pretrain
-    load_pretrain: bool = False
-    pretrain_image_size : int = 480 # default 270 x 480 and pretrain may be 180 x 320
+    load_pretrain: bool = False # unused
+    pretrain_image_size : int = 320 # default 320 x 180
 
     dataloader_pin_memory: bool = False
     # lora
-    lora_enable: bool = True
-    lora_module: str = "vit"
+    lora_enable: bool = True # specify using lora or not
+    lora_module: str = "vit llm" # specify which part to use lora, separated by spaces
     lora_r: int = 64
     lora_task_type: str = 'CAUSAL_LM'#'FEATURE_EXTRACTION'
     lora_alpha: int = 256
     lora_dropout: float = 0.05
     lora_weight_path: str = ""
     lora_bias: str = "none"
-    non_lora_lr: Optional[float] = 3e-5
+    non_lora_lr: Optional[float] = 3e-5 # learning rate for non lora part: Diffusion Policy head;
+    # learning_rate is inherited from parent class, used for lora part
     group_by_modality_length: bool = field(default=False)
 
     model_max_length: int = field(
@@ -129,11 +126,9 @@ def parse_pythia():
     global local_rank
 
     parser = transformers.HfArgumentParser(
-        (ModelArguments, DataArguments, TrainingArguments))
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-    # training_args.logging_dir = '/media/rl/HDD/projects/vlm_diffusion/log'
-    # print("##"*50)
-    # print(training_args.logging_dir)
+        (ModelArguments, DataArguments, TrainingArguments, ActionArguments))
+    model_args, data_args, training_args, action_args = parser.parse_args_into_dataclasses()
+
     local_rank = training_args.local_rank
     compute_dtype = (torch.float16 if training_args.fp16 else (torch.bfloat16 if training_args.bf16 else torch.float32))
 
@@ -159,16 +154,14 @@ def parse_pythia():
             )
         ))
 
-    if "pythia" in model_args.model_name_or_path.lower():
-        config = LlavaPythiaConfig.from_pretrained(model_args.model_name_or_path, trust_remote_code=True)
-    elif "phi" in model_args.model_name_or_path.lower():
-        config = LlavaPhiConfig.from_pretrained(model_args.model_name_or_path, trust_remote_code=True)
-    for k,v in asdict(action_head_args).items():
-        assert k in config.action_head['action_head'].keys(), f"there is no {k}"
-        config.action_head['action_head'][k] = v
-    config.concat = asdict(model_args)['concat']
+    config = LlavaPythiaConfig.from_pretrained(model_args.model_name_or_path, trust_remote_code=True)
 
-    return model_args, data_args, training_args, config, bnb_model_from_pretrained_args
+    # add parameters about acation head
+    for k in asdict(action_args).keys():
+        setattr(config, k, getattr(action_args, k))
+    config.concat = model_args.concat
+
+    return model_args, data_args, training_args, action_args, config, bnb_model_from_pretrained_args
 def train_bc(train_dataset=None, val_dataset=None, model=None, config=None, sampler_params=None, tokenizer=None):
 
     set_seed(config['training_args'].seed)
@@ -239,16 +232,16 @@ def main(config=None, llava_pythia_config=None):
 
     model, data_args = LlavaUtils.load_llava_pythia(config=config, llava_pythia_config=llava_pythia_config, rank0_print=rank0_print, tokenizer=tokenizer)
 
-    llava_pythia_process = LlavaPythiaProcess(data_args, tokenizer=tokenizer, language="pick up the bread and put it into the plate.")
+    # prepare process class
+    llava_pythia_process = LlavaPythiaProcess(data_args, tokenizer=tokenizer)
 
+    # load data
     train_dataset, val_dataset, stats, sampler_params = load_data(dataset_dir, name_filter, camera_names, config['training_args'].per_device_train_batch_size,
-                                                           config['training_args'].per_device_eval_batch_size, config['data_args'].chunk_size,
+                                                           config['training_args'].per_device_eval_batch_size, config['action_args'].chunk_size,
                                                            skip_mirrored_data=config['data_args'].skip_mirrored_data,
                                                            config=config,
-                                                           policy_class=config['model_args'].policy_class, stats_dir_l=stats_dir,
+                                                           policy_class=config['action_args'].action_head_type, stats_dir_l=stats_dir,
                                                            sample_weights=sample_weights, train_ratio=train_ratio, return_dataset=True, llava_pythia_process=llava_pythia_process)
-
-    # exit(0)
 
     best_ckpt_info = train_bc(train_dataset=train_dataset, model=model, val_dataset=val_dataset, config=config, sampler_params=sampler_params, tokenizer=tokenizer)
     # save dataset stats
@@ -258,12 +251,13 @@ def main(config=None, llava_pythia_config=None):
 
 
 if __name__ == '__main__':
-    model_args, data_args, training_args, action_head_args, llava_pythia_config, bnb_model_from_pretrained_args = parse_pythia()
+    # parse args
+    model_args, data_args, training_args, action_args, llava_pythia_config, bnb_model_from_pretrained_args = parse_pythia()
     config = {
         'model_args':model_args,
         'data_args':data_args,
         'training_args':training_args,
-        'action_head_args':action_head_args,
+        'action_args': action_args,
         'bnb_model_from_pretrained_args':bnb_model_from_pretrained_args
     }
     import json

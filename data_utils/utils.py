@@ -32,7 +32,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.llava_pythia_process = llava_pythia_process
         self.imsize = imsize
         if self.imsize == 320:
-            print("########################Current Image Size is [180,320]; maybe due to the pretrain data image size###################################")
+            print("########################Current Image Size is [180,320]###################################")
         if 'diffusion' in self.policy_class:
             self.augment_images = True
         else:

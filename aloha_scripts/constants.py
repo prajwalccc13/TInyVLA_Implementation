@@ -1,23 +1,20 @@
 
 ##################### Setting of training data #####################################
 
-DATA_DIR = '/path/to/your/data_dir' 
+# DATA_DIR = '/path/to/your/data_dir'
 
 TASK_CONFIGS = {
-    'close_the_drawer_succ_t0001_s-0-0':{
-        'dataset_dir': 
-            [
-                DATA_DIR + '/close_the_drawer_succ_t0001_s-0-0', # task 1
-                DATA_DIR + '/close_the_drawer_succ_t0001_s-0-0', # task 2
-                DATA_DIR + '/close_the_drawer_succ_t0001_s-0-0', # task 3
-            ],
-        'episode_len': 1000, 
-        'camera_names': ['front', 'wrist'] # dict keys corresponding to each camera view, use the key to read data from h5py format file
+    'example_task_config': { # for local debug
+        'dataset_dir': [
+            "/media/rl/HDD/data/data/act/new_view/8_29_tennis", # task 1
+        ],
+        'episode_len': 1000,  # 1000,
+        'camera_names': ['left', 'right', 'wrist'] # corresponding to image keys saved in h5py files
     },
 }
 ####################################################################################
 
-#!!!!!!!!!!!!!!!!!!!!!!Followings are inherited from aloha which are not used!!!!!!!!!!!!!!!!!!!!!!
+#!!!!!!!!!!!!!!!!!!!!!!Followings are copied from aloha which are not used!!!!!!!!!!!!!!!!!!!!!!
 ### ALOHA fixed constants
 DT = 0.02
 

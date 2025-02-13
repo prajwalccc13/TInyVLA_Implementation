@@ -1,22 +1,16 @@
 import torch
-from llava_pythia.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, \
-    DEFAULT_IM_END_TOKEN
-from torch.utils.data import DataLoader, Dataset, Subset
-from llava_pythia.train.llava_pythia_trainer import LLaVAPythiaTrainer
-from llava_pythia.mm_utils import get_model_name_from_path
+
 from llava_pythia import conversation as conversation_lib
-from llava_pythia.model import *
-from llava_pythia.mm_utils import tokenizer_image_token
+from llava_pythia.model.language_model.pythia.llava_pythia import LlavaPythiaForCausalLM
+
 import transformers
-import copy
-from dataclasses import dataclass, field, fields, asdict
-import json
+
 import logging
-import pathlib
+
 from typing import Dict, Optional, Sequence, List
 from transformers import CLIPVisionConfig, SiglipVisionConfig, CLIPImageProcessor, SiglipImageProcessor
 from llava_pythia.model import *
-from llava_pythia.model.builder import load_pretrained_model
+
 import os
 
 def find_all_linear_names(model, rank0_print, lora_module=None):
@@ -370,46 +364,4 @@ def smart_tokenizer_and_embedding_resize(
 
         input_embeddings[-num_new_tokens:] = input_embeddings_avg
         output_embeddings[-num_new_tokens:] = output_embeddings_avg
-
-
-def parse_pythia():
-    global local_rank
-
-    parser = transformers.HfArgumentParser(
-        (ModelArguments, DataArguments, TrainingArguments, ActionHeadArguments))
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-    local_rank = training_args.local_rank
-    compute_dtype = (torch.float16 if training_args.fp16 else (torch.bfloat16 if training_args.bf16 else torch.float32))
-
-    #     print("##"*50)
-    #     print(training_args.logging_dir)
-
-    bnb_model_from_pretrained_args = {}
-    if training_args.bits in [4, 8]:
-        from transformers import BitsAndBytesConfig
-        bnb_model_from_pretrained_args.update(dict(
-            device_map={"": training_args.device},
-            load_in_4bit=training_args.bits == 4,
-            load_in_8bit=training_args.bits == 8,
-            quantization_config=BitsAndBytesConfig(
-                load_in_4bit=training_args.bits == 4,
-                load_in_8bit=training_args.bits == 8,
-                llm_int8_skip_modules=["mm_projector"],
-                llm_int8_threshold=6.0,
-                llm_int8_has_fp16_weight=False,
-                bnb_4bit_compute_dtype=compute_dtype,
-                bnb_4bit_use_double_quant=training_args.double_quant,
-                bnb_4bit_quant_type=training_args.quant_type  # {'fp4', 'nf4'}
-            )
-        ))
-
-    config = LlavaPythiaConfig.from_pretrained(model_args.model_name_or_path, trust_remote_code=True)
-
-    config.concat = asdict(model_args)['concat']
-
-    # for k,v in asdict(droid_args).items():
-    #     if k in config.droid['droid'].keys():
-    #         config.droid['droid'][k] = v
-    return model_args, data_args, training_args, config, bnb_model_from_pretrained_args
-
 

@@ -795,17 +795,7 @@ def train():
         assert k in config.action_head['action_head'].keys()
         config.action_head['action_head'][k] = v
     config.concat = asdict(model_args)['concat']
-    # print("3#"*50)
-    # # print(ActionHeadConfig(**asdict(action_head_args)))
-    # print(config.action_head)
-    # print("#"*100)
-    # setattr(config, 'test', 'test')
-    # print(config.test)
-    # exit(0)
-    # for f in fields(action_head_args):
-    #     name = f.name
-    #     setattr(config, name, getattr(action_head_args, name))
-        # print(config.action_head)
+
     # exit(0)
     model = LlavaPythiaForCausalLM.from_pretrained(
         model_args.model_name_or_path,

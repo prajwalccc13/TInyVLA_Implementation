@@ -10,7 +10,6 @@ from transformers import AutoConfig, AutoModelForCausalLM, \
 
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from ...llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
-from ...action_head import *
 from transformers.utils import logging
 from .configuration_llava_pythia import LlavaPythiaConfig
 
@@ -40,13 +39,11 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
         super(GPTNeoXPreTrainedModel, self).__init__(config)
         self.gpt_neox = LLavaPythiaModel(config)
 
-        self.head_type = config.action_head['action_head']['action_head_type']
+        self.head_type = config.action_head_type
         self.visual_concat = config.concat
-
-        if config.action_head['action_head']['action_head_type'] == 'act':
-            pass
+        self.action_dim = config.action_dim
+        if config.action_head_type == 'act':
             self.embed_out = build_ACT_head(config.act['act'])
-            # self.proj_to_action = nn.Linear(config.hidden_size, config.act['act']['hidden_dim'])
             middle_dim = int(max(config.hidden_size, config.act['act']['hidden_dim']) / 2)
             self.proj_to_action = nn.Sequential(
                 nn.Linear(config.hidden_size, middle_dim),
@@ -56,10 +53,9 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
                 nn.LayerNorm(config.act['act']['hidden_dim']),
             )
 
-        elif config.action_head['action_head']['action_head_type'] == 'droid_diffusion':
+        elif config.action_head_type == 'droid_diffusion':
             from diffusers.schedulers.scheduling_ddim import DDIMScheduler
             from detr.models import ConditionalUnet1D
-            self.num_inference_timesteps = config.transformer_diffusion['transformer_diffusion']['num_inference_timesteps']
             self.proj_to_action = nn.Identity()
             self.noise_scheduler = DDIMScheduler(
                 num_train_timesteps=100,
@@ -70,16 +66,15 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
                 prediction_type='epsilon'
             )
             self.embed_out = ConditionalUnet1D(
-                input_dim=config.transformer_diffusion['transformer_diffusion']['action_dim'],
+                input_dim=config.action_dim,
                 global_cond_dim=config.hidden_size,
-                state_dim=config.transformer_diffusion['transformer_diffusion']['state_dim']
+                state_dim=config.state_dim
             )
-            self.num_queries = 16
+            self.num_queries = config.chunk_size
             self.noise_samples = 1
-            self.num_inference_timesteps = 100
+            self.num_inference_timesteps = 10
 
         self.post_init()
-        # print("#"*100)
 
     def get_channel_proj(self, x):
         return self.channel_proj(x)
@@ -109,45 +104,6 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
                 image_features = torch.cat([image_features, image_features_r], dim=1)
                 if images_top is not None:
                     image_features = torch.cat([image_features, image_features_top], dim=1)
-
-            elif visual_concat == "mean_sum":
-                image_features_r = self.encode_images(images_r)
-                image_features = (image_features + image_features_r) / 2  # 4x576x1024
-
-            elif visual_concat == "channel_cat":
-                # print("!"*50)
-                image_features = self.encode_images(images, proj=False)  # false 是不执行projector
-                # print(f"2{image_features.shape}")
-                image_features_r = self.encode_images(images_r, proj=False)
-                image_features = torch.cat([image_features, image_features_r], dim=-1)
-                image_features = self.get_channel_proj(image_features)
-
-                # execute projector separately
-                image_features = self.get_mm_projector(image_features)
-            elif visual_concat == "channel_cat_droid":
-                # data augmentation, color and crop obs_nets.py 100
-                images_2view = torch.stack((images, images_r))
-                orig_size = images_2view.shape
-                images_2view = torch.reshape(images_2view, (-1, *images_2view.shape[-3:]))
-                for rand in self.randomizers:
-                    if rand is not None:
-                        images_2view = rand.forward_in(images_2view)
-                image_features_2view = self.encode_images(images_2view, proj=False)  # false 是不执行projector
-                image_features_2view = torch.reshape(image_features_2view,
-                                                     (*orig_size[:-3], *image_features_2view.shape[-2:]))
-
-                images_l, images_r = torch.chunk(image_features_2view, 2, dim=0)
-                # mulit-view and states concated in the channel dim
-                states = states.unsqueeze(2).repeat(1, 1, images_l.shape[-2], 1)
-                view_fusion_features = torch.cat([images_l.squeeze(0), images_r.squeeze(0), states], dim=-1)
-                image_features = self.channel_proj(view_fusion_features)
-                #
-                assert image_features.ndim == 4
-                image_features = torch.transpose(image_features, 1, 2)
-                image_features = torch.flatten(image_features, start_dim=2)
-
-                image_features = self.get_mm_projector(image_features)
-                pass
             else:
                 raise ValueError(f"Unimplentmented concat style:{visual_concat}")
         return image_features
@@ -234,10 +190,23 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
         )
 
     def forward_fc_head(self, labels, actions, hidden_states, states):
+        """
+        Forward pass for the fully connected head (default setting).
+        Args:
+            labels (torch.Tensor, optional): Ground truth labels for classification.
+            actions (torch.Tensor, optional): Target actions for regression.
+            hidden_states (torch.Tensor): The hidden states used as input features.
+            states (torch.Tensor): The robot state information.
+        
+        Returns:
+            tuple: (loss, logits)
+                - loss (torch.Tensor or None): The computed loss if applicable.
+                - logits (torch.Tensor): The predicted output logits.
+        """
         logits = self.embed_out(input_feature=hidden_states, state_tensor=states)  # states 机器人状态信息
 
         loss = None
-        if labels is not None and actions is None:
+        if labels is not None and actions is None: # training time
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -249,7 +218,7 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
-        if actions is not None:
+        if actions is not None: # inference time
 
             loss = torch.nn.functional.huber_loss(logits, actions)
         return loss, logits
@@ -270,6 +239,21 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
         return total_kld, dimension_wise_kld, mean_kld
 
     def forward_act_head(self, actions, hidden_states, states, is_pad=None, vq_sample=None):
+        """
+        Forward pass for the action head.
+        This function processes actions using a VAE-based structure.
+        Args:
+            actions (torch.Tensor, optional): Target actions for training.
+            hidden_states (torch.Tensor): The hidden states used as input features.
+            states (torch.Tensor): The robot state information.
+            is_pad (torch.Tensor, optional): Mask indicating padded regions.
+            vq_sample (optional): Additional sampling parameter.
+        
+        Returns:
+            dict or torch.Tensor:
+                - If training, returns a dictionary containing `l1` loss, `kl` divergence, and total loss.
+                - If inference, returns predicted actions (`a_hat`).
+        """
         env_state = None
 
         hidden_states = self.proj_to_action(hidden_states)
@@ -297,10 +281,17 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
     def forward_diffusion_head(self, actions, hidden_states, states, is_pad):
         """
         Forward pass for the diffusion head.
-        :param actions: target actions, shape [B, Ta, D] D:10 = 3+6+1
-        :param hidden_states: hidden states from the llava_pythia, as the condition for the diffusion, shape [B,Tokens, D] 8 1200 1024
-        :param states: robot states, shape [B, D]
-        :return: loss
+        This function applies a diffusion-based process to predict actions.
+        Args:
+            actions (torch.Tensor, optional): Target actions for training.
+            hidden_states (torch.Tensor): Hidden states used as input features.
+            states (torch.Tensor): The robot state information.
+            is_pad (torch.Tensor): Mask indicating padded regions.
+        
+        Returns:
+            dict or torch.Tensor:
+                - If training, returns a dictionary containing the MSE loss.
+                - If inference, returns the predicted actions.
         """
         if actions is not None:  # training time
             B = actions.size(0)
@@ -319,7 +310,6 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             timesteps, noise = timesteps.to(actions.device), noise.to(actions.device)
 
             # add noise to the clean actions according to the noise magnitude at each diffusion iteration
-            # (this is the forward diffusion process)
             noisy_actions = torch.cat([self.noise_scheduler.add_noise(
                 actions, noise[i], timesteps)
                 for i in range(len(noise))], dim=0)  # [num_noise_samples * B, Ta, action_dim]
@@ -336,12 +326,11 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             noise = noise.view(noise.size(0) * noise.size(1), *noise.size()[2:])
             loss = torch.nn.functional.mse_loss(noise_pred, noise, reduction='none')
             loss = (loss * ~is_pad.unsqueeze(-1)).mean()
-            # loss_dict['loss'] = loss
             return {'loss': loss}
         else:  # inference time
             B = 1
             Tp = self.num_queries
-            action_dim = 10
+            action_dim = self.action_dim
 
             # initialize action from Guassian noise
             noisy_action = torch.randn((B, Tp, action_dim)).cuda()

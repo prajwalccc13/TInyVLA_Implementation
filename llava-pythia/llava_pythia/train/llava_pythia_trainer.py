@@ -63,8 +63,7 @@ def get_modality_length_grouped_indices(lengths, batch_size, world_size, generat
     # assert all(l > 0 for l in lengths) or all(l < 0 for l in lengths), "Should have only positive or negative lengths."
 
     mm_indices, mm_lengths = zip(*[(i, l) for i, l in enumerate(lengths) if l > 0])
-    # print(len(lengths),lengths)
-    # exit(0)
+
     lang_indices, lang_lengths = zip(*[(i, -l) for i, l in enumerate(lengths) if l < 0])
 
     assert len(mm_indices) > 0, "Should have at least one multimodal sample."

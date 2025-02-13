@@ -99,35 +99,7 @@ class LlavaMetaForCausalLM(ABC):
             image_features = [x.flatten(0, 1) for x in image_features]
         else:
             image_features = self.get_image_fusion_embedding(visual_concat=visual_concat, images=images, images_r=images_r, images_top=images_top, states=states)
-            # if visual_concat != "channel_cat":
-            #     image_features = self.encode_images(images)
-            # # print("!"*50)
-            # # print(visual_concat)
-            # # print(images_r.shape)
-            # if images_r != None:
-            #
-            #     image_features_r = self.encode_images(images_r)
-            #     if visual_concat == 'token_cat':
-            #         image_features = torch.cat([image_features, image_features_r], dim=1)
-            #     elif visual_concat == "mean_sum":
-            #         image_features = (image_features + image_features_r) / 2 # 4x576x1024
-            #     elif visual_concat == "channel_cat":
-            #         # print("!"*50)
-            #         image_features = self.encode_images(images, proj=False)  # false 是不执行projector
-            #         # print(f"2{image_features.shape}")
-            #         image_features_r = self.encode_images(images_r, proj=False)
-            #         image_features = torch.cat([image_features, image_features_r], dim=-1)
-            #         image_features = self.get_channel_proj(image_features)
-            #
-            #         # execute projector separately
-            #         image_features = self.get_mm_projector(image_features)
-            #     elif visual_concat == "channel_cat_droid":
-            #         pass
-            #     else:
-            #         raise ValueError(f"Unimplentmented concat style:{visual_concat}")
-        
-        # print(image_features.shape) # 4x576x1024  batchsize, tokens, embedding_dim
-        # print(input_ids[0])
+
         new_input_embeds = []
         new_labels = [] if labels is not None else None
         cur_image_idx = 0

@@ -141,10 +141,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # normalize image and change dtype to float
         image_data = image_data / 255.0
 
-        if 'diffusion' in self.policy_class:
+        if 'diffusion' in self.policy_class: # for diffusion
             # normalize to [-1, 1]
             action_data = ((action_data - self.norm_stats["action_min"]) / (self.norm_stats["action_max"] - self.norm_stats["action_min"])) * 2 - 1
-        else:
+        else: # for act
             # normalize to mean 0 std 1
             action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
 
@@ -168,7 +168,6 @@ class LlavaPythiaProcess:
             self,
             data_args=None,
             tokenizer=None,
-            language=None
     ):
         super().__init__()
 
