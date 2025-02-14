@@ -80,10 +80,10 @@ We construct the VLM backbone by integrating a series of tiny LLM([Pythia](https
 
 ## Train
 The training script is "scripts/train.sh". And you need to change following parameters:
-1. **OUTPUT** :refers to the save dir for training
+1. **OUTPUT** :refers to the save directory for training, which must include the keyword "llava_pythia" (and optionally "lora"). If LoRA training is used, the name must include "lora" (e.g., "llava_pythia_lora").
 2. **task_name** :refers to the tasks used for training, which should be corresponded to "your_task_name" in aloha_scripts/constant.py
 3. **model_name_or_path** :path to the pretrained VLM weights
-Other hyperparameters like "batch_size", "save_steps" could be customized according to your computation resources.
+4. Other hyperparameters like "batch_size", "save_steps" could be customized according to your computation resources.
 
 Start training by following commands:
 ```shell
