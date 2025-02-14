@@ -227,7 +227,7 @@ class LLaVAPythiaTrainer(Trainer):
         if self.args.group_by_modality_length:
             lengths = self.train_dataset.modality_lengths
             return LengthGroupedSampler(
-                # self.args.train_batch_size * self.args.gradient_accumulation_steps, # TODO: seems that we should not have gradient_accumulation_steps
+                # self.args.train_batch_size * self.args.gradient_accumulation_steps,
                 self.args.train_batch_size,
                 world_size=self.args.world_size,
                 lengths=lengths,
@@ -257,18 +257,18 @@ class LLaVAPythiaTrainer(Trainer):
                 test = []
                 for name, module in opt_model.named_parameters():
 
-                    # if 'layers' in name and 'vision' not in name and 'gpt_neox' in name: # gptneoxl LLM的参数
-                    if 'embed_out' not in name and 'layers' in name and 'vision' not in name and self.lang_type in name:  # gptneoxl LLM的参数
+                    # if 'layers' in name and 'vision' not in name and 'gpt_neox' in name
+                    if 'embed_out' not in name and 'layers' in name and 'vision' not in name and self.lang_type in name: 
                         if 'llm' not in self.lora_module:
                             non_lora_parameters.append(name)
                         pass
 
                     elif any(key in name for key in ['vision_resampler', 'mm_projector', 'embed_out',
-                                                     'proj_to_action']):  # vision adapter、action head的参数
+                                                     'proj_to_action']):  # params of vision adapter and action head
                         # non_lora_parameters.append(name)
                         non_lora_parameters.append(name)
 
-                    # elif not isinstance(module, torch.nn.Linear): #非线性层
+                    # elif not isinstance(module, torch.nn.Linear): # unlinear layer
                     #     non_lora_parameters.append(name)
                 if 'half' in self.lora_module:
                     for n,p in opt_model.named_parameters():
