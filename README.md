@@ -14,11 +14,15 @@ for Robotic Manipulation</h1>
 * **`Nov. 19th, 2024`**: **TinyVLA** is out! **Paper** can be found [here](https://arxiv.org/abs/2409.12514). The **project web** can be found [here](https://tiny-vla.github.io/).
 
 ## Contents
+- [📰 News](#-news)
+- [Contents](#contents)
 - [Install](#install)
 - [Data Preparation](#data-preparation)
-- [Download Pretrained VLM](#Download-Pretrained-VLM)
+- [Download Pretrained VLM](#download-pretrained-vlm)
 - [Train](#train)
 - [Evaluation](#evaluation)
+- [Acknowledgement](#acknowledgement)
+- [Citation](#citation)
 
 ## Install
 
@@ -33,7 +37,7 @@ conda create -n tinyvla python=3.10 -y
 conda activate tinyvla
 pip install --upgrade pip  # 
 pip install -r requirements.txt
-cd detr
+cd policy_heads
 pip install -e . 
 # install llava-pythia
 cd ../llava-pythia

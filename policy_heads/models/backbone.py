@@ -11,7 +11,7 @@ from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
 from typing import Dict, List
 
-from detr.util.misc import is_main_process, NestedTensor
+from policy_heads.util.misc import is_main_process, NestedTensor
 from .position_encoding import build_position_encoding
 
 import IPython

@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional, Tuple, Union
-from detr.models import build_ACT_head
+from policy_heads.models import build_ACT_head
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
@@ -47,7 +47,7 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
 
         elif config.action_head_type == 'droid_diffusion':
             from diffusers.schedulers.scheduling_ddim import DDIMScheduler
-            from detr.models import ConditionalUnet1D
+            from policy_heads.models import ConditionalUnet1D
             self.proj_to_action = nn.Identity()
             self.noise_scheduler = DDIMScheduler(
                 num_train_timesteps=100,
