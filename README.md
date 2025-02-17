@@ -28,7 +28,7 @@ for Robotic Manipulation</h1>
 
 1. Clone this repository and navigate to diffusion-vla folder
 ```bash
-git clone https://github.com/lesjie-wen/tinyvla.git
+git clone https://github.com/liyaxuanliyaxuan/TinyVLA
 ```
 
 2. Install Package
