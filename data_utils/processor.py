@@ -409,7 +409,7 @@ class LazySupervisedDataset(Dataset):
                 crop_size = self.data_args.image_processor.size
             data_dict['image'] = torch.zeros(3, crop_size['height'], crop_size['width'])
 
-        # 处理机器人相关数据，e.g. state，action
+        # process robot-related data，e.g. state，action
         try:
             data_dict['state'] = state
             data_dict['action'] = action

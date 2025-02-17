@@ -9,7 +9,7 @@ for Robotic Manipulation</h1>
 
 
 ## 📰 News
-* **`Feb. 12th, 2025`**: 🔥🔥🔥Our code is released!
+* **`Feb. 17th, 2025`**: 🔥🔥🔥Our code is released!
 * **`Feb. 9th, 2025`**: 🔥🔥🔥**TinyVLA** is accepted by IEEE Robotics and Automation Letters (RA-L) 2025!
 * **`Nov. 19th, 2024`**: **TinyVLA** is out! **Paper** can be found [here](https://arxiv.org/abs/2409.12514). The **project web** can be found [here](https://tiny-vla.github.io/).
 
