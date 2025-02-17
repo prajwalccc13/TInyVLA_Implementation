@@ -83,9 +83,19 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
 
     def __getitem__(self, index):
+        """
+        Retrieves a single data sample from the dataset at the specified index.
+
+        Args:
+            index (int): The index of the data sample to retrieve.
+
+        Returns:
+            Depending on the policy_class, either a tuple of (image_data, qpos_data, action_data, is_pad) 
+            or a processed sample dictionary containing image, state, action, is_pad, and raw_lang.
+        """
         episode_id, start_ts = self._locate_transition(index)
         dataset_path = self.dataset_path_list[episode_id]
-
+        # open the corresponding HDF5 file and read the necessary data attributes.
         with h5py.File(dataset_path, 'r') as root:
             try: # some legacy data does not have this attribute
                 is_sim = root.attrs['sim']
@@ -122,7 +132,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
             else:
                 action = action[max(0, start_ts - 1):] # hack, to make timesteps more aligned
                 action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
-
+        # pad actions to ensure consistent episode lengths.
         padded_action = np.zeros((self.max_episode_len, original_action_shape[1]), dtype=np.float32)
         padded_action[:action_len] = action
         is_pad = np.zeros(self.max_episode_len)
@@ -236,6 +246,23 @@ class LlavaPythiaProcess:
         return image
 
     def forward_process(self, sample):
+        """
+        Processes a sample from the dataset to prepare it for model input.
+
+        Args:
+            sample (dict): A dictionary containing the sample data. It includes keys like 'image', 'state', 'action', and 'is_pad'.
+
+        Returns:
+            dict: A dictionary containing processed data ready for model input. It includes:
+                - 'input_ids': Tokenized input IDs for the language model.
+                - 'labels': Corresponding labels for the input IDs.
+                - 'image': The first image from the sample, processed.
+                - 'image_r': The second image from the sample, processed.
+                - 'image_top': The third image from the sample, processed (if available).
+                - 'state': The state data from the sample.
+                - 'action': The action data from the sample.
+                - 'is_pad': Padding information for the sample.
+        """
         sources = self.datastruct_droid2llava(sample)
         image = self.parse_image(sample['image'])
 
@@ -280,6 +307,27 @@ class LlavaPythiaProcess:
         return sources
 
 def get_norm_stats(dataset_path_list):
+    """
+    Computes normalization statistics for action and qpos data from a list of dataset paths. Prepare to standardize the action data and robot position data (qpos data).
+
+    Args:
+        dataset_path_list (list of str): A list of file paths to the dataset files (e.g., HDF5 files).
+
+    Returns:
+        tuple: A tuple containing:
+            - stats (dict): A dictionary with the following keys:
+                - "action_mean": The mean of the action data across all episodes.
+                - "action_std": The standard deviation of the action data, clipped to a minimum of 0.01.
+                - "action_min": The minimum value of the action data, adjusted by a small epsilon.
+                - "action_max": The maximum value of the action data, adjusted by a small epsilon.
+                - "qpos_mean": The mean of the qpos data across all episodes.
+                - "qpos_std": The standard deviation of the qpos data, clipped to a minimum of 0.01.
+                - "example_qpos": An example qpos array from the last processed dataset.
+            - all_episode_len (list of int): A list of integers representing the lengths of each episode.
+
+    Raises:
+        Exception: If there is an error loading a dataset file, the function will print an error message and terminate the program.
+    """
     all_qpos_data = []
     all_action_data = []
     all_episode_len = []
@@ -344,6 +392,32 @@ def BatchSampler(batch_size, episode_len_l, sample_weights):
         yield batch
 
 def load_data(dataset_dir_l, name_filter, camera_names, batch_size_train, batch_size_val, chunk_size, config, skip_mirrored_data=False, policy_class=None, stats_dir_l=None, sample_weights=None, train_ratio=0.99, return_dataset=False, llava_pythia_process=None):
+    """
+    Loads and prepares datasets for training and evaluation.
+
+    Args:
+        dataset_dir_l (list or str): A list of directories or a single directory containing dataset files.
+        name_filter (function): A function to filter dataset files based on their names.
+        camera_names (list of str): A list of camera names to be used for data collection.
+        batch_size_train (int): The batch size for training.
+        batch_size_val (int): The batch size for validation.
+        chunk_size (int): The number of time steps to return in each sample.
+        config (dict): Configuration dictionary containing various settings, including image size.
+        skip_mirrored_data (bool, optional): Whether to skip mirrored data files. Defaults to False.
+        policy_class (str, optional): The type of policy being used (e.g., "ACT", "diffusion"). Defaults to None.
+        stats_dir_l (list or str, optional): Directories for computing normalization statistics. Defaults to None.
+        sample_weights (list, optional): Weights for sampling episodes. Defaults to None.
+        train_ratio (float, optional): The ratio of data to be used for training. Defaults to 0.99.
+        return_dataset (bool, optional): Whether to return the datasets and parameters. Defaults to False.
+        llava_pythia_process (object, optional): An optional process for further data processing. Defaults to None.
+
+    Returns:
+        tuple: If `return_dataset` is True, returns a tuple containing:
+            - train_dataset (EpisodicDataset): The training dataset.
+            - val_dataset (EpisodicDataset): The validation dataset.
+            - norm_stats (dict): Normalization statistics.
+            - sampler_params (dict): Parameters for data sampling.
+    """
     if type(dataset_dir_l) == str:
         dataset_dir_l = [dataset_dir_l]
     dataset_path_list_list = [find_all_hdf5(dataset_dir, skip_mirrored_data) for dataset_dir in dataset_dir_l]
