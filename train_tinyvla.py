@@ -1,4 +1,3 @@
-
 import pickle
 import sys
 import os
@@ -45,7 +44,7 @@ class DataArguments:
     lazy_preprocess: bool = False
     is_multimodal: bool = False
     image_aspect_ratio: str = 'square'
-    task_name: str = field(default="example_task_config") # task name used for training, which is the key in aloha_scripts/constants.py
+    task_name: str = field(default="example_task_config")
     skip_mirrored_data: bool = field(default=True)
 
 @dataclass
@@ -56,13 +55,10 @@ class TrainingArguments(transformers.TrainingArguments):
     adam_beta2: float = field(default=0.98)
     adam_epsilon: float = field(default=1e-7)
     remove_unused_columns: bool = field(default=False)
-
-    freeze_vision_tower: bool = field(default=False) # whether to freeze vit in VLM or not
-    freeze_backbone: bool = field(default=False) # whether to freeze LLM in VLM or not
+    freeze_vision_tower: bool = field(default=False)
+    freeze_backbone: bool = field(default=False)
     tune_mm_mlp_adapter: bool = field(default=False)
-
-    # logger
-    logging_dir: str = field(default='./logs')  # TensorBoard
+    logging_dir: str = field(default='./logs')
     logging_strategy: str = field(default='steps')
     logging_steps: int = field(default=10)
 
@@ -123,6 +119,18 @@ def rank0_print(*args):
         print(*args)
 
 def parse_pythia():
+    """
+    Parses command-line arguments into dataclasses for model, data, training, and action configurations.
+
+    This function uses the HfArgumentParser to parse command-line arguments into structured dataclasses.
+    It sets the global `local_rank` variable based on the training arguments and configures quantization
+    settings if specified in the training arguments.
+
+    Returns:
+        tuple: A tuple containing the parsed model, data, training, and action arguments, 
+               a configuration object for the LlavaPythia model, and a dictionary for 
+               model loading arguments with quantization settings.
+    """
     global local_rank
 
     parser = transformers.HfArgumentParser(
@@ -162,8 +170,23 @@ def parse_pythia():
     config.concat = model_args.concat
 
     return model_args, data_args, training_args, action_args, config, bnb_model_from_pretrained_args
-def train_bc(train_dataset=None, val_dataset=None, model=None, config=None, sampler_params=None, tokenizer=None):
 
+def train_bc(train_dataset=None, val_dataset=None, model=None, config=None, sampler_params=None, tokenizer=None):
+    """
+    Trains a model using the provided training and validation datasets.
+
+    This function initializes a data collator and a trainer, then starts the training process.
+    It saves the model state and configuration after training. If LoRA (Low-Rank Adaptation) is enabled
+    in the training arguments, it handles specific saving procedures for LoRA.
+
+    Args:
+        train_dataset: The dataset used for training.
+        val_dataset: The dataset used for validation.
+        model: The model to be trained.
+        config: Configuration dictionary containing training arguments.
+        sampler_params: Parameters for the data sampler.
+        tokenizer: Tokenizer used for processing the input data.
+    """
     set_seed(config['training_args'].seed)
 
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
@@ -203,6 +226,17 @@ def train_bc(train_dataset=None, val_dataset=None, model=None, config=None, samp
 
 
 def main(config=None, llava_pythia_config=None):
+    """
+    Main function to set up and execute the training process.
+
+    This function initializes the tokenizer and model based on the provided configuration.
+    It loads the training and validation datasets and calls the `train_bc` function to perform
+    the training. After training, it saves dataset statistics.
+
+    Args:
+        config: Configuration dictionary containing model, data, training, and action arguments.
+        llava_pythia_config: Configuration object for the LlavaPythia model.
+    """
     set_seed(1)
     # command line parameters
     training_args = config['training_args'].__dict__

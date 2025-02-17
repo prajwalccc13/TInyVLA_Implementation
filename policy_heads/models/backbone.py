@@ -21,11 +21,9 @@ class FrozenBatchNorm2d(torch.nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt,
-    without which any other policy_models than torchvision.policy_models.resnet[18,34,50,101]
-    produce nans.
+    This implementation is a copy-paste from torchvision.misc.ops with added eps before rsqrt,
+    without which any other models than torchvision.models.resnet[18,34,50,101] produce NaNs.
     """
-
     def __init__(self, n):
         super(FrozenBatchNorm2d, self).__init__()
         self.register_buffer("weight", torch.ones(n))
@@ -35,6 +33,7 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
+        # remove num_batches_tracked from state_dict if present
         num_batches_tracked_key = prefix + 'num_batches_tracked'
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
@@ -44,8 +43,16 @@ class FrozenBatchNorm2d(torch.nn.Module):
             missing_keys, unexpected_keys, error_msgs)
 
     def forward(self, x):
-        # move reshapes to the beginning
-        # to make it fuser-friendly
+        """
+        Forward pass for the frozen batch normalization.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Normalized tensor.
+        """
+        # move reshapes to the beginning to make it fuser-friendly
         w = self.weight.reshape(1, -1, 1, 1)
         b = self.bias.reshape(1, -1, 1, 1)
         rv = self.running_var.reshape(1, -1, 1, 1)
@@ -57,12 +64,18 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
 
 class BackboneBase(nn.Module):
+    """
+    Base class for backbone networks.
 
+    Args:
+        backbone: The backbone model.
+        train_backbone: Whether to train the backbone.
+        num_channels: Number of output channels.
+        return_interm_layers: Whether to return intermediate layers.
+    """
     def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
         super().__init__()
-        # for name, parameter in backbone.named_parameters(): # only train later layers # TODO do we want this?
-        #     if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
-        #         parameter.requires_grad_(False)
+        # determine which layers to return
         if return_interm_layers:
             return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
         else:
@@ -71,35 +84,58 @@ class BackboneBase(nn.Module):
         self.num_channels = num_channels
 
     def forward(self, tensor):
+        """
+        Forward pass for the backbone.
+
+        Args:
+            tensor: Input tensor.
+
+        Returns:
+            Dictionary of feature maps from the specified layers.
+        """
         xs = self.body(tensor)
         return xs
-        # out: Dict[str, NestedTensor] = {}
-        # for name, x in xs.items():
-        #     m = tensor_list.mask
-        #     assert m is not None
-        #     mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-        #     out[name] = NestedTensor(x, mask)
-        # return out
 
 
 class Backbone(BackboneBase):
-    """ResNet backbone with frozen BatchNorm."""
-    def __init__(self, name: str,
-                 train_backbone: bool,
-                 return_interm_layers: bool,
-                 dilation: bool):
+    """
+    ResNet backbone with frozen BatchNorm.
+
+    Args:
+        name: Name of the ResNet model.
+        train_backbone: Whether to train the backbone.
+        return_interm_layers: Whether to return intermediate layers.
+        dilation: Whether to use dilation in the last block.
+    """
+    def __init__(self, name: str, train_backbone: bool, return_interm_layers: bool, dilation: bool):
         backbone = getattr(torchvision.models, name)(
             replace_stride_with_dilation=[False, False, dilation],
-            pretrained=is_main_process(), norm_layer=FrozenBatchNorm2d) # pretrained # TODO do we want frozen batch_norm??
+            pretrained=is_main_process(), norm_layer=FrozenBatchNorm2d)  # use pretrained model
         num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
 
 
 class Joiner(nn.Sequential):
+    """
+    Combines a backbone and a position encoding module.
+
+    Args:
+        backbone: The backbone model.
+        position_embedding: The position encoding module.
+    """
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
     def forward(self, tensor_list: NestedTensor):
+        """
+        Forward pass for the joiner.
+
+        Args:
+            tensor_list: NestedTensor containing input data and mask.
+
+        Returns:
+            Tuple of feature maps and position encodings.
+        """
         xs = self[0](tensor_list)
         out: List[NestedTensor] = []
         pos = []
@@ -112,6 +148,15 @@ class Joiner(nn.Sequential):
 
 
 def build_backbone(args):
+    """
+    Builds the backbone model with position encoding.
+
+    Args:
+        args: Arguments containing configuration for the backbone.
+
+    Returns:
+        A model combining the backbone and position encoding.
+    """
     position_embedding = build_position_encoding(args)
     train_backbone = args.lr_backbone > 0
     return_interm_layers = args.masks

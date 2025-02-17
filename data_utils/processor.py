@@ -85,6 +85,22 @@ def preprocess_multimodal(
         sources: Sequence[str],
         data_args,
 ) -> Dict:
+    """
+    Preprocesses a list of multimodal sources by modifying image tokens.
+
+    This function checks if the data is multimodal based on the `data_args` parameter.
+    If it is, it processes each source and its sentences to handle image tokens.
+    Specifically, it replaces the default image token with a formatted version,
+    optionally adding start and end tokens around it.
+
+    Args:
+        sources (Sequence[str]): A sequence of source data, where each source is a list of sentences.
+        data_args: An object containing data arguments, including whether the data is multimodal
+                   and whether to use start and end tokens for images.
+
+    Returns:
+        Dict: The processed sources with modified image tokens.
+    """
     is_multimodal = data_args.is_multimodal
     if not is_multimodal:
         return sources
@@ -103,12 +119,26 @@ def preprocess_multimodal(
     return sources
 
 
-# TODO
 def preprocess_v0(
         sources,
         tokenizer: transformers.PreTrainedTokenizer,
         has_image: bool = False
 ) -> Dict:
+    """
+    Preprocesses a list of conversation sources for tokenization.
+
+    This function processes a list of conversation sources, applying prompt templates
+    and tokenizing the conversations. It handles both text and multimodal data (if images are present).
+    The function also masks certain parts of the tokenized data to ignore them during training.
+
+    Args:
+        sources (list): A list of conversation sources, where each source is a list of sentences.
+        tokenizer (transformers.PreTrainedTokenizer): A tokenizer to convert text into token IDs.
+        has_image (bool): A flag indicating whether the data includes images.
+
+    Returns:
+        Dict: A dictionary containing tokenized input IDs and labels.
+    """
     conv = conversation_lib.default_conversation.copy()
     roles = {"human": conv.roles[0], "gpt": conv.roles[1]}
 
@@ -193,6 +223,23 @@ def preprocess_plain(
         sources: Sequence[str],
         tokenizer: transformers.PreTrainedTokenizer,
 ) -> Dict:
+    """
+    Preprocesses a list of conversation sources for tokenization in a plain format.
+
+    This function processes a list of conversation sources, ensuring that each source
+    contains exactly two elements and that the first element includes a default image token.
+    It concatenates the values of the two elements with a separator and tokenizes the resulting
+    conversation. The function also masks certain parts of the tokenized data to ignore them
+    during training.
+
+    Args:
+        sources (Sequence[str]): A sequence of conversation sources, where each source is a list
+                                 of two sentences. The first sentence must contain a default image token.
+        tokenizer (transformers.PreTrainedTokenizer): A tokenizer to convert text into token IDs.
+
+    Returns:
+        Dict: A dictionary containing tokenized input IDs and labels, with certain parts masked.
+    """
     # add end signal and concatenate together
     conversations = []
     for source in sources:
@@ -216,11 +263,20 @@ def preprocess(
         has_image: bool = False
 ) -> Dict:
     """
-    Given a list of sources, each is a conversation list. This transform:
-    1. Add signal '### ' at the beginning each sentence, with end signal '\n';
-    2. Concatenate conversations together;
-    3. Tokenize the concatenated conversation;
-    4. Make a deepcopy as the target. Mask human words with IGNORE_INDEX.
+    Preprocesses a list of conversation sources for tokenization.
+
+    This function processes a list of conversation sources, applying different preprocessing
+    strategies based on the conversation separator style and version. It handles both text
+    and multimodal data (if images are present). The function also masks certain parts of
+    the tokenized data to ignore them during training.
+
+    Args:
+        sources (Sequence[str]): A sequence of conversation sources, where each source is a list of sentences.
+        tokenizer (transformers.PreTrainedTokenizer): A tokenizer to convert text into token IDs.
+        has_image (bool): A flag indicating whether the data includes images.
+
+    Returns:
+        Dict: A dictionary containing tokenized input IDs and labels.
     """
     if conversation_lib.default_conversation.sep_style == conversation_lib.SeparatorStyle.PLAIN:
         return preprocess_plain(sources, tokenizer)
@@ -337,6 +393,18 @@ class LazySupervisedDataset(Dataset):
         return image
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+        """
+        Retrieves a sample from the dataset at the specified index.
+
+        This function processes the sample, including tokenizing text and processing images,
+        and returns a dictionary containing the processed data.
+
+        Args:
+            i (int): Index of the sample to retrieve.
+
+        Returns:
+            Dict[str, torch.Tensor]: Dictionary containing tokenized input IDs, labels, and image data.
+        """
         sources = self.list_data_dict[i]
         # print("#@"*100)
         # print(sources)
@@ -426,13 +494,20 @@ class LazySupervisedDataset(Dataset):
 
 @dataclass
 class DataCollatorForSupervisedDataset(object):
-    """Collate examples for supervised fine-tuning."""
+    """
+    Collate examples for supervised fine-tuning.
 
+    This class is responsible for preparing batches of data for supervised training.
+    It processes a sequence of instances, each containing input IDs, labels, and potentially
+    other data like actions, states, and images. The class ensures that all sequences are
+    padded to the same length and that any missing or invalid data is handled appropriately.
+
+    Attributes:
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer used to convert text into token IDs.
+    """
     tokenizer: transformers.PreTrainedTokenizer
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        # print(instances[0])
-        # print(len(instances))
         input_ids, labels = tuple([instance[key] for instance in instances]
                                   for key in ("input_ids", "labels"))
         # temp_pad_token_id = 51000
@@ -495,7 +570,7 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                 data_args, concat="None") -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
 
-    train_eval_split = 0.9  # 训练占0.9，评估占0.1
+    train_eval_split = 0.9
     # print("$"*50)
     # print(concat)
     train_dataset = LazySupervisedDataset(tokenizer=tokenizer,

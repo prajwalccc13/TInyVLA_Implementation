@@ -116,6 +116,19 @@ class TrainingArguments(transformers.TrainingArguments):
 
 
 def maybe_zero_3(param, ignore_status=False, name=None):
+    """
+    This function checks if a parameter is managed by DeepSpeed's ZeRO optimization and, if so, gathers it from
+    distributed shards into a single tensor on the CPU. If the parameter is not managed by ZeRO, it simply clones
+    the parameter to the CPU.
+
+    Args:
+        param: The parameter tensor to be gathered or cloned.
+        ignore_status (bool): If True, suppresses warnings about the parameter's status in ZeRO. Default is False.
+        name (str): An optional name for the parameter, used in logging warnings.
+
+    Returns:
+        A CPU clone of the parameter tensor.
+    """
     from deepspeed import zero
     from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
     if hasattr(param, "ds_id"):
@@ -129,8 +142,21 @@ def maybe_zero_3(param, ignore_status=False, name=None):
     return param
 
 
-# Borrowed from peft.utils.get_peft_model_state_dict
 def get_peft_state_maybe_zero_3(named_params, bias):
+    """
+    Retrieves the state of parameters related to the PEFT (Parameter-Efficient Fine-Tuning) method,
+    potentially using DeepSpeed's ZeRO optimization to gather parameters from distributed shards.
+
+    Args:
+        named_params (iterable): An iterable of tuples containing parameter names and tensors.
+        bias (str): Specifies which parameters to include based on bias. Options are:
+            - "none": Only include parameters with "lora_" in their name.
+            - "all": Include parameters with "lora_" or "bias" in their name.
+            - "lora_only": Include parameters with "lora_" in their name and their corresponding biases.
+
+    Returns:
+        dict: A dictionary mapping parameter names to their gathered or cloned CPU tensors.
+    """
     if bias == "none":
         to_return = {k: t for k, t in named_params if "lora_" in k}
     elif bias == "all":
@@ -156,6 +182,16 @@ def get_peft_state_maybe_zero_3(named_params, bias):
 
 
 def get_peft_state_non_lora_maybe_zero_3(named_params, require_grad_only=True):
+    """
+    Retrieves the state of non-LoRA parameters, potentially using DeepSpeed's ZeRO optimization.
+
+    Args:
+        named_params (iterable): An iterable of tuples containing parameter names and tensors.
+        require_grad_only (bool): If True, only include parameters that require gradients.
+
+    Returns:
+        dict: A dictionary mapping parameter names to their gathered or cloned CPU tensors.
+    """
     to_return = {k: t for k, t in named_params if "lora_" not in k}
     if require_grad_only:
         to_return = {k: t for k, t in to_return.items() if t.requires_grad}
@@ -164,12 +200,31 @@ def get_peft_state_non_lora_maybe_zero_3(named_params, require_grad_only=True):
 
 
 def get_mm_adapter_state_maybe_zero_3(named_params, keys_to_match):
+    """
+    Retrieves the state of parameters related to multimodal adapters, potentially using DeepSpeed's ZeRO optimization.
+
+    Args:
+        named_params (iterable): An iterable of tuples containing parameter names and tensors.
+        keys_to_match (list): A list of strings to match against parameter names.
+
+    Returns:
+        dict: A dictionary mapping parameter names to their gathered or cloned CPU tensors.
+    """
     to_return = {k: t for k, t in named_params if any(key_match in k for key_match in keys_to_match)}
     to_return = {k: maybe_zero_3(v, ignore_status=True).cpu() for k, v in to_return.items()}
     return to_return
 
 
 def find_all_linear_names(model):
+    """
+    Finds all linear module names in a model, excluding those related to multimodal components.
+
+    Args:
+        model (torch.nn.Module): The model to search for linear modules.
+
+    Returns:
+        list: A list of names of linear modules, excluding 'lm_head' if present.
+    """
     cls = torch.nn.Linear
     lora_module_names = set()
     multimodal_keywords = ['mm_projector', 'vision_tower', 'vision_resampler']
@@ -292,6 +347,16 @@ def preprocess_multimodal(
         sources: Sequence[str],
         data_args: DataArguments
 ) -> Dict:
+    """
+    Preprocesses multimodal data by modifying the text in each sentence to include image tokens.
+
+    Args:
+        sources (Sequence[str]): A sequence of source data, where each source is a list of sentences.
+        data_args (DataArguments): Data arguments containing configuration for multimodal processing.
+
+    Returns:
+        Dict: A dictionary of processed sources with image tokens appropriately inserted.
+    """
     is_multimodal = data_args.is_multimodal
     if not is_multimodal:
         return sources
@@ -318,6 +383,17 @@ def preprocess_v0(
         tokenizer: transformers.PreTrainedTokenizer,
         has_image: bool = False
 ) -> Dict:
+    """
+    Preprocesses data using version 0 of the conversation template, applying prompt templates and tokenizing.
+
+    Args:
+        sources (list): A list of source data, where each source is a list of sentences.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for tokenizing the conversations.
+        has_image (bool): Flag indicating if the data includes images.
+
+    Returns:
+        Dict: A dictionary containing tokenized input IDs and target labels.
+    """
     conv = conversation_lib.default_conversation.copy()
     roles = {"human": conv.roles[0], "gpt": conv.roles[1]}
 
@@ -402,10 +478,18 @@ def preprocess_plain(
         sources: Sequence[str],
         tokenizer: transformers.PreTrainedTokenizer,
 ) -> Dict:
+    """
+    Preprocesses plain text data by concatenating sentences and tokenizing the conversation.
+
+    Args:
+        sources (Sequence[str]): A sequence of source data, where each source is a list of sentences.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for tokenizing the conversations.
+
+    Returns:
+        Dict: A dictionary containing tokenized input IDs and target labels.
+    """
     # add end signal and concatenate together
     conversations = []
-    # print(sources)
-    # time.sleep(5)
     for source in sources:
         assert len(source) == 2
         assert DEFAULT_IMAGE_TOKEN in source[0]['value']
@@ -413,7 +497,6 @@ def preprocess_plain(
         conversation = source[0]['value'] + source[1]['value'] + conversation_lib.default_conversation.sep
         conversations.append(conversation)
     # tokenize conversations
-    # print(conversations)
     input_ids = [tokenizer_image_token(prompt, tokenizer, return_tensors='pt') for prompt in conversations]
     targets = copy.deepcopy(input_ids)
     for target, source in zip(targets, sources):
@@ -428,11 +511,20 @@ def preprocess(
         has_image: bool = False
 ) -> Dict:
     """
-    Given a list of sources, each is a conversation list. This transform:
-    1. Add signal '### ' at the beginning each sentence, with end signal '\n';
-    2. Concatenate conversations together;
-    3. Tokenize the concatenated conversation;
-    4. Make a deepcopy as the target. Mask human words with IGNORE_INDEX.
+    Preprocesses a list of conversation sources for tokenization.
+
+    This function processes a list of conversation sources, applying different preprocessing
+    strategies based on the conversation separator style and version. It handles both text
+    and multimodal data (if images are present). The function also masks certain parts of
+    the tokenized data to ignore them during training.
+
+    Args:
+        sources (Sequence[str]): A sequence of conversation sources, where each source is a list of sentences.
+        tokenizer (transformers.PreTrainedTokenizer): A tokenizer to convert text into token IDs.
+        has_image (bool): A flag indicating whether the data includes images.
+
+    Returns:
+        Dict: A dictionary containing tokenized input IDs and labels.
     """
     if conversation_lib.default_conversation.sep_style == conversation_lib.SeparatorStyle.PLAIN:
         return preprocess_plain(sources, tokenizer)

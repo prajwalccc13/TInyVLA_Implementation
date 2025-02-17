@@ -26,8 +26,10 @@ class Conversation:
 
     skip_next: bool = False
 
-    def get_prompt(self):
+    def get_prompt(self) -> str:
+        """Generate a prompt string based on the conversation history and separator style."""
         messages = self.messages
+        # check if the first message is a tuple and process accordingly
         if len(messages) > 0 and type(messages[0][1]) is tuple:
             messages = self.messages.copy()
             init_role, init_msg = messages[0].copy()
@@ -39,6 +41,7 @@ class Conversation:
             else:
                 messages[0] = (init_role, "<image>\n" + init_msg)
 
+        # construct the prompt based on the separator style
         if self.sep_style == SeparatorStyle.SINGLE:
             ret = self.system + self.sep
             for role, message in messages:
@@ -73,10 +76,12 @@ class Conversation:
 
         return ret
 
-    def append_message(self, role, message):
+    def append_message(self, role: str, message: str) -> None:
+        """Append a new message to the conversation."""
         self.messages.append([role, message])
 
-    def get_images(self, return_pil=False):
+    def get_images(self, return_pil: bool = False) -> List:
+        """Extract images from the conversation messages."""
         images = []
         for i, (role, msg) in enumerate(self.messages[self.offset:]):
             if i % 2 == 0:
@@ -85,6 +90,7 @@ class Conversation:
                     from io import BytesIO
                     from PIL import Image
                     msg, image, image_process_mode = msg
+                    # process image based on the mode
                     if image_process_mode == "Pad":
                         def expand2square(pil_img, background_color=(122, 116, 104)):
                             width, height = pil_img.size
@@ -105,6 +111,7 @@ class Conversation:
                         image = image.resize((336, 336))
                     else:
                         raise ValueError(f"Invalid image_process_mode: {image_process_mode}")
+                    # resize image to maintain aspect ratio
                     max_hw, min_hw = max(image.size), min(image.size)
                     aspect_ratio = max_hw / min_hw
                     max_len, min_len = 800, 400

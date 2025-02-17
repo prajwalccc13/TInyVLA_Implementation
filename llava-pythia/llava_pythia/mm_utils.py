@@ -41,6 +41,18 @@ def process_images(images, image_processor, model_cfg):
 
 
 def tokenizer_image_token(prompt, tokenizer, image_token_index=IMAGE_TOKEN_INDEX, return_tensors=None):
+    """
+    Tokenizes a prompt string that may contain image placeholders and returns the tokenized input IDs.
+
+    Args:
+        prompt (str): The input string containing text and '<image>' placeholders.
+        tokenizer: The tokenizer object used to tokenize the text.
+        image_token_index (int, optional): The token index used to represent the '<image>' placeholder. Defaults to IMAGE_TOKEN_INDEX.
+        return_tensors (str, optional): If specified, returns the tokenized input as a tensor of the specified type ('pt' for PyTorch). Defaults to None.
+
+    Returns:
+        list or torch.Tensor: The tokenized input IDs. If `return_tensors` is specified as 'pt', returns a PyTorch tensor; otherwise, returns a list of input IDs.
+    """
     prompt_chunks = [tokenizer(chunk).input_ids for chunk in prompt.split('<image>')]
     # print("####"*100)
     # attention = [tokenizer(chunk).attention_mask for chunk in prompt.split('<image>')]

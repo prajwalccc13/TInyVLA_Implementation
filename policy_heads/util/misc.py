@@ -25,7 +25,8 @@ if version.parse(torchvision.__version__) < version.parse('0.7'):
 
 
 class SmoothedValue(object):
-    """Track a series of values and provide access to smoothed values over a
+    """
+    Track a series of values and provide access to smoothed values over a
     window or the global series average.
     """
 
@@ -38,12 +39,20 @@ class SmoothedValue(object):
         self.fmt = fmt
 
     def update(self, value, n=1):
+        """
+        Update the smoothed value with a new data point.
+
+        Args:
+            value: The new value to add.
+            n: The number of occurrences of the value.
+        """
         self.deque.append(value)
         self.count += n
         self.total += value * n
 
     def synchronize_between_processes(self):
         """
+        Synchronize the smoothed values across distributed processes.
         Warning: does not synchronize the deque!
         """
         if not is_dist_avail_and_initialized():
@@ -110,9 +119,7 @@ def all_gather(data):
     size_list = [int(size.item()) for size in size_list]
     max_size = max(size_list)
 
-    # receiving Tensor from all ranks
-    # we pad the tensor because torch all_gather does not support
-    # gathering tensors of different shapes
+    # receive Tensor from all ranks
     tensor_list = []
     for _ in size_list:
         tensor_list.append(torch.empty((max_size,), dtype=torch.uint8, device="cuda"))
@@ -131,12 +138,15 @@ def all_gather(data):
 
 def reduce_dict(input_dict, average=True):
     """
-    Args:
-        input_dict (dict): all the values will be reduced
-        average (bool): whether to do average or sum
     Reduce the values in the dictionary from all processes so that all processes
-    have the averaged results. Returns a dict with the same fields as
-    input_dict, after reduction.
+    have the averaged results.
+
+    Args:
+        input_dict (dict): All the values will be reduced.
+        average (bool): Whether to do average or sum.
+
+    Returns:
+        A dict with the same fields as input_dict, after reduction.
     """
     world_size = get_world_size()
     if world_size < 2:
@@ -157,11 +167,24 @@ def reduce_dict(input_dict, average=True):
 
 
 class MetricLogger(object):
+    """
+    Logs and tracks metrics over time, providing smoothed values.
+
+    Args:
+        delimiter: Delimiter used in the log output.
+    """
+
     def __init__(self, delimiter="\t"):
         self.meters = defaultdict(SmoothedValue)
         self.delimiter = delimiter
 
     def update(self, **kwargs):
+        """
+        Update the metrics with new values.
+
+        Args:
+            kwargs: Key-value pairs of metric names and their values.
+        """
         for k, v in kwargs.items():
             if isinstance(v, torch.Tensor):
                 v = v.item()
@@ -185,13 +208,31 @@ class MetricLogger(object):
         return self.delimiter.join(loss_str)
 
     def synchronize_between_processes(self):
+        """
+        Synchronize the metrics across distributed processes.
+        """
         for meter in self.meters.values():
             meter.synchronize_between_processes()
 
     def add_meter(self, name, meter):
+        """
+        Add a new meter to track a specific metric.
+
+        Args:
+            name: Name of the metric.
+            meter: SmoothedValue instance to track the metric.
+        """
         self.meters[name] = meter
 
     def log_every(self, iterable, print_freq, header=None):
+        """
+        Log metrics at a specified frequency during iteration.
+
+        Args:
+            iterable: Iterable to loop over.
+            print_freq: Frequency of logging.
+            header: Optional header for the log output.
+        """
         i = 0
         if not header:
             header = ''
@@ -247,6 +288,12 @@ class MetricLogger(object):
 
 
 def get_sha():
+    """
+    Get the current git commit SHA, status, and branch.
+
+    Returns:
+        A string with the SHA, status, and branch information.
+    """
     cwd = os.path.dirname(os.path.abspath(__file__))
 
     def _run(command):
@@ -267,13 +314,30 @@ def get_sha():
 
 
 def collate_fn(batch):
+    """
+    Collate function for data loading.
+
+    Args:
+        batch: A batch of data.
+
+    Returns:
+        A tuple containing the collated batch.
+    """
     batch = list(zip(*batch))
     batch[0] = nested_tensor_from_tensor_list(batch[0])
     return tuple(batch)
 
 
 def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
+    """
+    Find the maximum value by axis in a list of lists.
+
+    Args:
+        the_list: List of lists of integers.
+
+    Returns:
+        A list of maximum values by axis.
+    """
     maxes = the_list[0]
     for sublist in the_list[1:]:
         for index, item in enumerate(sublist):
@@ -282,12 +346,28 @@ def _max_by_axis(the_list):
 
 
 class NestedTensor(object):
+    """
+    A class to hold a tensor and its corresponding mask.
+
+    Args:
+        tensors: The tensor data.
+        mask: The mask for the tensor.
+    """
+
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
         self.mask = mask
 
     def to(self, device):
-        # type: (Device) -> NestedTensor # noqa
+        """
+        Move the NestedTensor to a specified device.
+
+        Args:
+            device: The target device.
+
+        Returns:
+            A NestedTensor on the target device.
+        """
         cast_tensor = self.tensors.to(device)
         mask = self.mask
         if mask is not None:
@@ -305,16 +385,22 @@ class NestedTensor(object):
 
 
 def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
-    # TODO make this more general
+    """
+    Create a NestedTensor from a list of tensors.
+
+    Args:
+        tensor_list: List of tensors.
+
+    Returns:
+        A NestedTensor containing the tensors and their masks.
+    """
     if tensor_list[0].ndim == 3:
         if torchvision._is_tracing():
             # nested_tensor_from_tensor_list() does not export well to ONNX
             # call _onnx_nested_tensor_from_tensor_list() instead
             return _onnx_nested_tensor_from_tensor_list(tensor_list)
 
-        # TODO make it support different-sized images
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
         batch_shape = [len(tensor_list)] + max_size
         b, c, h, w = batch_shape
         dtype = tensor_list[0].dtype
@@ -329,20 +415,23 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     return NestedTensor(tensor, mask)
 
 
-# _onnx_nested_tensor_from_tensor_list() is an implementation of
-# nested_tensor_from_tensor_list() that is supported by ONNX tracing.
 @torch.jit.unused
 def _onnx_nested_tensor_from_tensor_list(tensor_list: List[Tensor]) -> NestedTensor:
+    """
+    Create a NestedTensor from a list of tensors, compatible with ONNX tracing.
+
+    Args:
+        tensor_list: List of tensors.
+
+    Returns:
+        A NestedTensor containing the tensors and their masks.
+    """
     max_size = []
     for i in range(tensor_list[0].dim()):
         max_size_i = torch.max(torch.stack([img.shape[i] for img in tensor_list]).to(torch.float32)).to(torch.int64)
         max_size.append(max_size_i)
     max_size = tuple(max_size)
 
-    # work around for
-    # pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-    # m[: img.shape[1], :img.shape[2]] = False
-    # which is not yet supported in onnx
     padded_imgs = []
     padded_masks = []
     for img in tensor_list:
@@ -362,7 +451,10 @@ def _onnx_nested_tensor_from_tensor_list(tensor_list: List[Tensor]) -> NestedTen
 
 def setup_for_distributed(is_master):
     """
-    This function disables printing when not in master process
+    Disable printing when not in master process.
+
+    Args:
+        is_master: Boolean indicating if the current process is the master.
     """
     import builtins as __builtin__
     builtin_print = __builtin__.print
@@ -376,6 +468,12 @@ def setup_for_distributed(is_master):
 
 
 def is_dist_avail_and_initialized():
+    """
+    Check if distributed processing is available and initialized.
+
+    Returns:
+        True if available and initialized, False otherwise.
+    """
     if not dist.is_available():
         return False
     if not dist.is_initialized():
@@ -384,27 +482,58 @@ def is_dist_avail_and_initialized():
 
 
 def get_world_size():
+    """
+    Get the world size for distributed processing.
+
+    Returns:
+        The world size.
+    """
     if not is_dist_avail_and_initialized():
         return 1
     return dist.get_world_size()
 
 
 def get_rank():
+    """
+    Get the rank of the current process in distributed processing.
+
+    Returns:
+        The rank of the current process.
+    """
     if not is_dist_avail_and_initialized():
         return 0
     return dist.get_rank()
 
 
 def is_main_process():
+    """
+    Check if the current process is the main process.
+
+    Returns:
+        True if the current process is the main process, False otherwise.
+    """
     return get_rank() == 0
 
 
 def save_on_master(*args, **kwargs):
+    """
+    Save data only if the current process is the main process.
+
+    Args:
+        *args: Arguments for the save function.
+        **kwargs: Keyword arguments for the save function.
+    """
     if is_main_process():
         torch.save(*args, **kwargs)
 
 
 def init_distributed_mode(args):
+    """
+    Initialize distributed processing mode.
+
+    Args:
+        args: Arguments containing configuration for distributed processing.
+    """
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
@@ -431,7 +560,17 @@ def init_distributed_mode(args):
 
 @torch.no_grad()
 def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
+    """
+    Computes the precision@k for the specified values of k.
+
+    Args:
+        output: Model output.
+        target: Ground truth labels.
+        topk: Tuple of top-k values to compute precision for.
+
+    Returns:
+        List of precision@k values.
+    """
     if target.numel() == 0:
         return [torch.zeros([], device=output.device)]
     maxk = max(topk)
@@ -449,11 +588,18 @@ def accuracy(output, target, topk=(1,)):
 
 
 def interpolate(input, size=None, scale_factor=None, mode="nearest", align_corners=None):
-    # type: (Tensor, Optional[List[int]], Optional[float], str, Optional[bool]) -> Tensor
     """
     Equivalent to nn.functional.interpolate, but with support for empty batch sizes.
-    This will eventually be supported natively by PyTorch, and this
-    class can go away.
+
+    Args:
+        input: Input tensor.
+        size: Output size.
+        scale_factor: Scaling factor.
+        mode: Interpolation mode.
+        align_corners: Whether to align corners.
+
+    Returns:
+        Interpolated tensor.
     """
     if version.parse(torchvision.__version__) < version.parse('0.7'):
         if input.numel() > 0:

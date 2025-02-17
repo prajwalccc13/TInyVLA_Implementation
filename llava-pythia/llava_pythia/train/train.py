@@ -458,11 +458,20 @@ def preprocess(
         has_image: bool = False
 ) -> Dict:
     """
-    Given a list of sources, each is a conversation list. This transform:
-    1. Add signal '### ' at the beginning each sentence, with end signal '\n';
-    2. Concatenate conversations together;
-    3. Tokenize the concatenated conversation;
-    4. Make a deepcopy as the target. Mask human words with IGNORE_INDEX.
+    Preprocesses a list of conversation sources for tokenization.
+
+    This function processes a list of conversation sources, applying different preprocessing
+    strategies based on the conversation separator style and version. It handles both text
+    and multimodal data (if images are present). The function also masks certain parts of
+    the tokenized data to ignore them during training.
+
+    Args:
+        sources (Sequence[str]): A sequence of conversation sources, where each source is a list of sentences.
+        tokenizer (transformers.PreTrainedTokenizer): A tokenizer to convert text into token IDs.
+        has_image (bool): A flag indicating whether the data includes images.
+
+    Returns:
+        Dict: A dictionary containing tokenized input IDs and labels.
     """
     if conversation_lib.default_conversation.sep_style == conversation_lib.SeparatorStyle.PLAIN:
         return preprocess_plain(sources, tokenizer)
@@ -595,32 +604,7 @@ class LazySupervisedDataset(Dataset):
                 assert 'left_cap2' in self.list_data_dict[i]['image'], f"Wrong data, no left_cap2 in the path {self.list_data_dict[i]['image']}"
                 image_file_right = self.list_data_dict[i]['image'].replace('left_cap2', 'right_cap2')
                 image_right = self.parse_image(i, image_file_right)
-#             image_file = self.list_data_dict[i]['image']
-#             image_folder = self.data_args.image_folder
-#             processor = self.data_args.image_processor
-#             image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
-#             if self.data_args.image_aspect_ratio == 'pad':
-#                 def expand2square(pil_img, background_color):
-#                     width, height = pil_img.size
-#                     if width == height:
-#                         return pil_img
-#                     elif width > height:
-#                         result = Image.new(pil_img.mode, (width, width), background_color)
-#                         result.paste(pil_img, (0, (width - height) // 2))
-#                         return result
-#                     else:
-#                         result = Image.new(pil_img.mode, (height, height), background_color)
-#                         result.paste(pil_img, ((height - width) // 2, 0))
-#                         return result
-                
-#                 # print("##"*50)
-#                 # print(processor.image_mean)
-#                 # exit(0)
-                
-#                 image = expand2square(image, tuple(int(x * 255) for x in processor.image_mean))
-#                 image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
-#             else:
-#                 image = processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+
             sources = preprocess_multimodal(
                 copy.deepcopy([e["conversations"] for e in sources]),
                 self.data_args)
@@ -647,7 +631,6 @@ class LazySupervisedDataset(Dataset):
                 crop_size = self.data_args.image_processor.size
             data_dict['image'] = torch.zeros(3, crop_size['height'], crop_size['width'])
         
-        # 处理机器人相关数据，e.g. state，action
         try:
             data_dict['state'] = state
             data_dict['action'] = action
@@ -726,7 +709,20 @@ class DataCollatorForSupervisedDataset(object):
 
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                 data_args, concat="None") -> Dict:
-    """Make dataset and collator for supervised fine-tuning."""
+    """
+    Create a dataset and data collator for supervised fine-tuning.
+
+    This function initializes the training and evaluation datasets using the `LazySupervisedDataset` class.
+    It also creates a data collator for batching the data during training.
+
+    Args:
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer used to process the text data.
+        data_args: Arguments related to the data, including paths and processing options.
+        concat (str): A string indicating the concatenation strategy for the data. Default is "None".
+
+    Returns:
+        Dict: A dictionary containing the training dataset, evaluation dataset, and data collator.
+    """
     # train_dataset = LazySupervisedDataset(tokenizer=tokenizer,
     #                                       data_path=data_args.data_path,
     #                                       data_args=data_args)
@@ -760,15 +756,14 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
 def train():
     global local_rank
 
+    # parse command line arguments into dataclasses
     parser = transformers.HfArgumentParser(
         (ModelArguments, DataArguments, TrainingArguments, ActionHeadArguments))
     model_args, data_args, training_args, action_head_args = parser.parse_args_into_dataclasses()
     local_rank = training_args.local_rank
     compute_dtype = (torch.float16 if training_args.fp16 else (torch.bfloat16 if training_args.bf16 else torch.float32))
     
-#     print("##"*50)
-#     print(training_args.logging_dir)
-    
+    # prepare model configuration for quantization if needed
     bnb_model_from_pretrained_args = {}
     if training_args.bits in [4, 8]:
         from transformers import BitsAndBytesConfig
@@ -788,38 +783,40 @@ def train():
             )
         ))
 
+    # load model configuration
     config = LlavaPythiaConfig.from_pretrained(model_args.model_name_or_path, trust_remote_code=True)
     for k,v in asdict(action_head_args).items():
         assert k in config.action_head['action_head'].keys()
         config.action_head['action_head'][k] = v
     config.concat = asdict(model_args)['concat']
 
-    # exit(0)
+    # load the model with the specified configuration
     model = LlavaPythiaForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=training_args.cache_dir,
         trust_remote_code=True,
-        # attn_implementation="flash_attention_2",
         **bnb_model_from_pretrained_args
     )
     rank0_print(model)
 
     model.config.use_cache = False
 
+    # freeze or unfreeze the backbone of the model based on the arguments
     model_args.freeze_backbone = training_args.freeze_backbone
     if model_args.freeze_backbone:
         model.get_model().requires_grad_(False)
     else:
         model.get_model().requires_grad_(True)
     
+    # prepare model for k-bit training if needed
     if training_args.bits in [4, 8]:
         from peft import prepare_model_for_kbit_training
         model.config.torch_dtype = (
             torch.float32 if training_args.fp16 else (torch.bfloat16 if training_args.bf16 else torch.float32))
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
 
-    # TODO: https://huggingface.co/microsoft/phi-2/discussions/31. But in this code, setting gradient_checkpointing=True, it doesn't raise any error
+    # enable gradient checkpointing if specified
     if training_args.gradient_checkpointing:
         if hasattr(model, "enable_input_require_grads"):
             model.enable_input_require_grads()
@@ -829,6 +826,7 @@ def train():
 
             model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
 
+    # configure LoRA adapters if enabled
     if training_args.lora_enable:
         from peft import LoraConfig, get_peft_model
         lora_config = LoraConfig(
@@ -844,12 +842,11 @@ def train():
                 model.to(torch.bfloat16)
             if training_args.fp16:
                 model.to(torch.float16)
-        rank0_print("##"*20)
-
         rank0_print("Adding LoRA adapters...")
         model = get_peft_model(model, lora_config)
         rank0_print(model)
 
+    # load tokenizer
     if 'pythia' in model_args.model_name_or_path:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
@@ -874,15 +871,18 @@ def train():
     rank0_print("default_conversation :")
     rank0_print(conversation_lib.default_conversation)
 
+    # configure vision tower
     vision_tower = model.get_vision_tower()
     vision_tower.to(dtype=torch.bfloat16 if training_args.bf16 else torch.float16, device=training_args.device)
 
+    # set image processor based on model configuration
     if "clip" in config.vision_config["vision_tower"]["vision_model_name_or_path"]:
         data_args.image_processor = CLIPImageProcessor.from_pretrained(model_args.model_name_or_path)
     elif "siglip" in config.vision_config["vision_tower"]["vision_model_name_or_path"]:
         data_args.image_processor = SiglipImageProcessor.from_pretrained(model_args.model_name_or_path)
     data_args.is_multimodal = True
 
+    # set model configuration parameters
     model.config.image_aspect_ratio = data_args.image_aspect_ratio
     model.config.tokenizer_padding_side = tokenizer.padding_side
     model.config.tokenizer_model_max_length = tokenizer.model_max_length
@@ -907,24 +907,17 @@ def train():
         for p in model.get_model().vision_tower.parameters():
             p.requires_grad = True
     
-        # action head需要训练
     model.embed_out.requires_grad_(True)
     for k,v in model.named_parameters():
         if v.requires_grad:
             rank0_print(k, v.requires_grad)
-    # exit(0)
     
+    # calculate and print the percentage of trainable parameters
     def calculate_trainable_parameters_percentage(model):
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         percentage = (trainable_params / total_params) * 100
         return ("trainable_params", trainable_params, "total_params", total_params, "percentage", percentage)
-
-    # rank0_print(model)
-    # rank0_print(calculate_trainable_parameters_percentage(model))
-    # for k,v in model.get_model().named_parameters():
-    #     rank0_print(k)
-    # sys.exit(-1)
 
     if training_args.bits in [4, 8]:
         model.get_model().mm_projector.to(dtype=compute_dtype, device=training_args.device)
@@ -948,26 +941,26 @@ def train():
                     if training_args.bf16 and module.weight.dtype == torch.float32:
                         module = module.to(torch.bfloat16)
 
+    # create data module for training
     data_module = make_supervised_data_module(tokenizer=tokenizer,
                                               data_args=data_args,
                                               concat=model_args.concat)
 
+    # initialize the trainer
     trainer = LLaVAPythiaTrainer(model=model,
                                  tokenizer=tokenizer,
                                  args=training_args,
                                  **data_module)
 
-    # if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
-    #     trainer.train(resume_from_checkpoint=True)
-    # else:
-    #     trainer.train()
-
+    # start training
     trainer.train()
 
+    # save the training state
     trainer.save_state()
 
     model.config.use_cache = True
 
+    # save model state based on LoRA configuration
     if training_args.lora_enable:
         state_dict = get_peft_state_maybe_zero_3(
             model.named_parameters(), training_args.lora_bias

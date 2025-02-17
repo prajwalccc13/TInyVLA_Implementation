@@ -20,12 +20,32 @@ IN_DIM_ACTION = 7
 
 
 def reparametrize(mu, logvar):
+    """
+    Reparameterization trick to sample from a Gaussian distribution.
+
+    Args:
+        mu: Mean of the Gaussian distribution.
+        logvar: Log variance of the Gaussian distribution.
+
+    Returns:
+        A sample from the Gaussian distribution.
+    """
     std = logvar.div(2).exp()
     eps = Variable(std.data.new(std.size()).normal_())
     return mu + std * eps
 
 
 def get_sinusoid_encoding_table(n_position, d_hid):
+    """
+    Generates a sinusoidal position encoding table.
+
+    Args:
+        n_position: Number of positions.
+        d_hid: Dimension of the hidden layer.
+
+    Returns:
+        A tensor containing the sinusoidal position encodings.
+    """
     def get_position_angle_vec(position):
         return [position / np.power(10000, 2 * (hid_j // 2) / d_hid) for hid_j in range(d_hid)]
 
@@ -37,12 +57,25 @@ def get_sinusoid_encoding_table(n_position, d_hid):
 
 
 class DETRVAE(nn.Module):
-    """ This is the DETR module that performs object detection """
+    """
+    DETR module that performs object detection with a VAE component.
 
+    Args:
+        backbones: List of backbone modules for feature extraction.
+        transformer: Transformer module for processing input features.
+        encoder: Encoder module for the CVAE framework.
+        state_dim: Dimension of the robot state.
+        num_queries: Number of object queries (detection slots).
+        camera_names: List of camera names used in the observation space.
+        vq: Whether to use vector quantization for the latent representation.
+        vq_class: Number of codebook classes for vector quantization.
+        vq_dim: Dimensionality of each codebook vector in vector quantization.
+        action_dim: Dimensionality of the action space.
+    """
     def __init__(self, backbones, transformer, encoder, state_dim, num_queries, camera_names, vq, vq_class, vq_dim,
                  action_dim):
         """ Initializes the model.
-        Parameters:
+       Args:
             backbones: torch module of the backbone to be used. See backbone.py
             transformer: torch module of the transformer architecture. See transformer.py
             state_dim: robot state dimension of the environment
@@ -94,6 +127,18 @@ class DETRVAE(nn.Module):
         self.additional_pos_embed = nn.Embedding(2, hidden_dim)  # learned position embedding for proprio and latent
 
     def encode(self, qpos, actions=None, is_pad=None, vq_sample=None):
+        """
+        Encodes the input using the encoder module.
+
+        Args:
+            qpos: Tensor representing the robot's joint positions.
+            actions: Tensor representing the action sequence.
+            is_pad: Tensor indicating padding positions.
+            vq_sample: Tensor for vector quantization sampling.
+
+        Returns:
+            Tuple containing the latent input, probabilities, binaries, mu, and logvar.
+        """
         bs, _ = qpos.shape
         if self.encoder is None:
             latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
@@ -102,7 +147,6 @@ class DETRVAE(nn.Module):
         else:
             # cvae encoder
             is_training = actions is not None  # train or val
-            ### Obtain latent z from action sequence
             if is_training:
                 # project action sequence to embedding dim, and concat with a CLS token
                 action_embed = self.encoder_action_proj(actions)  # (bs, seq, hidden_dim)
@@ -152,10 +196,18 @@ class DETRVAE(nn.Module):
 
     def forward(self, qpos, image, env_state, actions=None, is_pad=None, vq_sample=None):
         """
-        qpos: batch, qpos_dim
-        image: batch, num_cam, channel, height, width
-        env_state: None
-        actions: batch, seq, action_dim
+        Forward pass for the DETR VAE model.
+
+        Args:
+            qpos: Tensor representing the robot's joint positions.
+            image: Tensor representing the image input.
+            env_state: Tensor representing the environment state.
+            actions: Tensor representing the action sequence.
+            is_pad: Tensor indicating padding positions.
+            vq_sample: Tensor for vector quantization sampling.
+
+        Returns:
+            Tuple containing the predicted actions, padding predictions, latent variables, probabilities, and binaries.
         """
         latent_input, probs, binaries, mu, logvar = self.encode(qpos, actions, is_pad, vq_sample)
 
@@ -192,7 +244,7 @@ class DETRVAEHEAD(nn.Module):
     def __init__(self, transformer, encoder, state_dim, num_queries, camera_names, vq, vq_class, vq_dim,
                  action_dim):
         """ Initializes the model.
-        Parameters:
+       Args:
             backbones (list of torch.nn.Module or None): A list of backbone modules for feature extraction from images.
                                                          If None, the model relies only on state inputs.
             transformer (torch.nn.Module): The transformer model that processes the input features.
@@ -332,7 +384,7 @@ class DETRVAEHEAD(nn.Module):
 class CNNMLP(nn.Module):
     def __init__(self, backbones, state_dim, camera_names):
         """ Initializes the model.
-        Parameters:
+       Args:
             backbones: torch module of the backbone to be used. See backbone.py
             transformer: torch module of the transformer architecture. See transformer.py
             state_dim: robot state dimension of the environment
@@ -416,6 +468,15 @@ def build_encoder(args):
 
 
 def build(args):
+    """
+    Builds the DETR VAE model.
+
+    Args:
+        args: Arguments containing configuration for the model.
+
+    Returns:
+        The constructed DETR VAE model.
+    """
     state_dim = IN_DIM_STATE
 
     # From state: No image processing needed, state information is used directly

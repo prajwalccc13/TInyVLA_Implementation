@@ -18,6 +18,25 @@ def flatten_list(l):
     return [item for sublist in l for item in sublist]
 
 class EpisodicDataset(torch.utils.data.Dataset):
+    """
+    A custom PyTorch Dataset class for episodic data.
+
+    Attributes:
+        dataset_path_list (list): List of paths to the dataset files.
+        camera_names (list): List of camera names used in the dataset.
+        norm_stats (dict): Normalization statistics for actions and states.
+        episode_ids (list): List of episode identifiers.
+        episode_len (list): List of lengths of each episode.
+        chunk_size (int): The size of data chunks to be processed.
+        policy_class (str): The class of policy used, affects data processing.
+        llava_pythia_process (object): Optional processing object for additional data handling.
+        imsize (int): Image size for processing, default is 480.
+        augment_images (bool): Flag to determine if image augmentation is applied.
+        transformations (list): List of transformations for image augmentation.
+        cumulative_len (numpy.ndarray): Cumulative sum of episode lengths.
+        max_episode_len (int): Maximum length of an episode.
+        is_sim (bool): Flag indicating if the data is from a simulation.
+    """
     def __init__(self, dataset_path_list, camera_names, norm_stats, episode_ids, episode_len, chunk_size, policy_class, llava_pythia_process=None, imsize=480):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
@@ -56,6 +75,15 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
 
     def __getitem__(self, index):
+        """
+        Retrieves a data sample for a given index.
+
+        Args:
+            index (int): The index of the sample to retrieve.
+
+        Returns:
+            dict: A dictionary containing the processed data sample.
+        """
         episode_id, start_ts = self._locate_transition(index)
         dataset_path = self.dataset_path_list[episode_id]
 
@@ -170,6 +198,14 @@ class LlavaPythiaProcess:
             tokenizer=None,
             language=None
     ):
+        """
+        Initializes the LlavaPythiaProcess class.
+
+        Args:
+            data_args: Arguments related to data processing, expected to have an image_processor attribute.
+            tokenizer: Tokenizer object for processing text data.
+            language: Optional language parameter, currently not used.
+        """
         super().__init__()
 
         self.data_args = data_args
@@ -178,6 +214,15 @@ class LlavaPythiaProcess:
         # self.language = language
 
     def parse_image(self, image_file):
+        """
+        Parses and preprocesses an image file.
+
+        Args:
+            image_file: The image file to be processed, can be a torch.Tensor.
+
+        Returns:
+            torch.Tensor: The preprocessed image tensor.
+        """
         # image_file = self.list_data_dict[i]['image']
 
         image = image_file
@@ -209,6 +254,15 @@ class LlavaPythiaProcess:
         return image
 
     def forward_process(self, sample):
+        """
+        Processes a sample to prepare it for model input.
+
+        Args:
+            sample: A dictionary containing the sample data.
+
+        Returns:
+            dict: A dictionary containing processed data ready for model input.
+        """
         sources = self.datastruct_droid2llava(sample)
         image = self.parse_image(sample['image'])
 
@@ -253,6 +307,27 @@ class LlavaPythiaProcess:
         return sources
 
 def get_norm_stats(dataset_path_list):
+    """
+    Computes normalization statistics for qpos and action data from a list of dataset paths.
+
+    Args:
+        dataset_path_list (list): A list of paths to the dataset files.
+
+    Returns:
+        tuple: A tuple containing:
+            - stats (dict): A dictionary with normalization statistics including:
+                - "action_mean": Mean of the action data.
+                - "action_std": Standard deviation of the action data, clipped to a minimum of 0.01.
+                - "action_min": Minimum value of the action data, slightly adjusted by a small epsilon.
+                - "action_max": Maximum value of the action data, slightly adjusted by a small epsilon.
+                - "qpos_mean": Mean of the qpos data.
+                - "qpos_std": Standard deviation of the qpos data, clipped to a minimum of 0.01.
+                - "example_qpos": An example qpos array from the last processed dataset.
+            - all_episode_len (list): A list of episode lengths corresponding to each dataset.
+
+    Raises:
+        Exception: If there is an error loading a dataset file, it prints the error and exits the program.
+    """
     all_qpos_data = []
     all_action_data = []
     all_episode_len = []
@@ -317,6 +392,32 @@ def BatchSampler(batch_size, episode_len_l, sample_weights):
         yield batch
 
 def load_data(dataset_dir_l, name_filter, camera_names, batch_size_train, batch_size_val, chunk_size, config, skip_mirrored_data=False, policy_class=None, stats_dir_l=None, sample_weights=None, train_ratio=0.99, return_dataset=False, llava_pythia_process=None):
+    """
+    Loads and prepares datasets for training and validation.
+
+    Args:
+        dataset_dir_l (str or list): Directory or list of directories containing dataset files.
+        name_filter (function): A function to filter dataset file names.
+        camera_names (list): List of camera names used in the dataset.
+        batch_size_train (int): Batch size for training data.
+        batch_size_val (int): Batch size for validation data.
+        chunk_size (int): Size of data chunks to be processed.
+        config (dict): Configuration dictionary containing training arguments.
+        skip_mirrored_data (bool, optional): Whether to skip mirrored data files. Defaults to False.
+        policy_class (str, optional): Class of policy used, affects data processing. Defaults to None.
+        stats_dir_l (str or list, optional): Directory or list of directories for normalization statistics. Defaults to None.
+        sample_weights (list, optional): Weights for sampling episodes. Defaults to None.
+        train_ratio (float, optional): Ratio of data used for training. Defaults to 0.99.
+        return_dataset (bool, optional): Whether to return the dataset objects. Defaults to False.
+        llava_pythia_process (object, optional): Optional processing object for additional data handling. Defaults to None.
+
+    Returns:
+        tuple: If return_dataset is True, returns a tuple containing:
+            - train_dataset (EpisodicDataset): The training dataset.
+            - val_dataset (EpisodicDataset): The validation dataset.
+            - norm_stats (dict): Normalization statistics.
+            - sampler_params (dict): Parameters for data sampling.
+    """
     if type(dataset_dir_l) == str:
         dataset_dir_l = [dataset_dir_l]
     dataset_path_list_list = [find_all_hdf5(dataset_dir, skip_mirrored_data) for dataset_dir in dataset_dir_l]

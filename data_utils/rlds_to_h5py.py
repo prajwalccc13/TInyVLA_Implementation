@@ -271,6 +271,20 @@ def print_name(name):
     print(name)
 
 def generate_h5(obs_replay, action_replay, cfg, total_traj_cnt, act_root_dir_path, edit_flag):
+    """
+    Generates an HDF5 file to store observation and action data for a given trajectory.
+
+    Args:
+        obs_replay (dict): A dictionary containing observation data, including 'qpos', 'qvel', and 'images'.
+        action_replay (numpy.ndarray): An array containing action data for the trajectory.
+        cfg (dict): Configuration dictionary containing metadata such as camera names, dimensions, and language instructions.
+        total_traj_cnt (int): The current trajectory count, used to name the output file.
+        act_root_dir_path (str): The root directory path where the HDF5 file will be saved.
+        edit_flag (bool): A flag indicating whether the data has been edited.
+
+    The function creates an HDF5 file named 'episode_{total_traj_cnt}.hdf5' in the specified directory.
+    It stores the observation data, action data, and metadata such as whether the data was edited and the raw language instructions.
+    """
     data_dict = {
         '/observations/qpos': obs_replay['qpos'],
         '/observations/qvel': obs_replay['qvel'],

@@ -18,12 +18,28 @@ from diffusers.training_utils import EMAModel
 # =================== UNet for Diffusion ==============
 
 class SinusoidalPosEmb(nn.Module):
+    """
+    Sinusoidal positional embedding for diffusion models.
+
+    Args:
+        dim: The dimension of the embedding.
+        dtype: The data type for the embedding.
+    """
     def __init__(self, dim, dtype):
         super().__init__()
         self.dim = dim
-        self.dtype=dtype
+        self.dtype = dtype
 
     def forward(self, x):
+        """
+        Forward pass to compute the sinusoidal positional embedding.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            The sinusoidal positional embedding.
+        """
         device = x.device
         half_dim = self.dim // 2
         emb = math.log(10000) / (half_dim - 1)
@@ -34,6 +50,12 @@ class SinusoidalPosEmb(nn.Module):
 
 
 class Downsample1d(nn.Module):
+    """
+    1D downsampling layer using convolution.
+
+    Args:
+        dim: The number of input and output channels.
+    """
     def __init__(self, dim):
         super().__init__()
         self.conv = nn.Conv1d(dim, dim, 3, 2, 1)
@@ -43,6 +65,12 @@ class Downsample1d(nn.Module):
 
 
 class Upsample1d(nn.Module):
+    """
+    1D upsampling layer using transposed convolution.
+
+    Args:
+        dim: The number of input and output channels.
+    """
     def __init__(self, dim):
         super().__init__()
         self.conv = nn.ConvTranspose1d(dim, dim, 4, 2, 1)
@@ -52,10 +80,15 @@ class Upsample1d(nn.Module):
 
 
 class Conv1dBlock(nn.Module):
-    '''
-        Conv1d --> GroupNorm --> Mish
-    '''
+    """
+    A block consisting of Conv1d, GroupNorm, and Mish activation.
 
+    Args:
+        inp_channels: Number of input channels.
+        out_channels: Number of output channels.
+        kernel_size: Size of the convolutional kernel.
+        n_groups: Number of groups for GroupNorm.
+    """
     def __init__(self, inp_channels, out_channels, kernel_size, n_groups=8):
         super().__init__()
 
@@ -70,12 +103,17 @@ class Conv1dBlock(nn.Module):
 
 
 class ConditionalResidualBlock1D(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 cond_dim,
-                 kernel_size=3,
-                 n_groups=8):
+    """
+    Conditional residual block with FiLM modulation.
+
+    Args:
+        in_channels: Number of input channels.
+        out_channels: Number of output channels.
+        cond_dim: Dimension of the conditioning input.
+        kernel_size: Size of the convolutional kernel.
+        n_groups: Number of groups for GroupNorm.
+    """
+    def __init__(self, in_channels, out_channels, cond_dim, kernel_size=3, n_groups=8):
         super().__init__()
 
         self.blocks = nn.ModuleList([
@@ -93,23 +131,25 @@ class ConditionalResidualBlock1D(nn.Module):
             nn.Unflatten(-1, (-1, 1))
         )
 
-        # make sure dimensions compatible
+        # ensure dimensions are compatible
         self.residual_conv = nn.Conv1d(in_channels, out_channels, 1) \
             if in_channels != out_channels else nn.Identity()
 
     def forward(self, x, cond):
-        '''
-            x : [ batch_size x in_channels x horizon ]
-            cond : [ batch_size x cond_dim]
+        """
+        Forward pass for the conditional residual block.
 
-            returns:
-            out : [ batch_size x out_channels x horizon ]
-        '''
+        Args:
+            x: Input tensor of shape [batch_size, in_channels, horizon].
+            cond: Conditioning tensor of shape [batch_size, cond_dim].
+
+        Returns:
+            Output tensor of shape [batch_size, out_channels, horizon].
+        """
         out = self.blocks[0](x)
         embed = self.cond_encoder(cond)
 
-        embed = embed.reshape(
-            embed.shape[0], 2, self.out_channels, 1)
+        embed = embed.reshape(embed.shape[0], 2, self.out_channels, 1)
         scale = embed[:, 0, ...]
         bias = embed[:, 1, ...]
         out = scale * out + bias
@@ -120,33 +160,27 @@ class ConditionalResidualBlock1D(nn.Module):
 
 
 class ConditionalUnet1D(nn.Module):
-    def __init__(self,
-                 input_dim,
-                 global_cond_dim,
-                 diffusion_step_embed_dim=256,
-                 down_dims=[256, 512, 1024],
-                 kernel_size=5,
-                 n_groups=8,
-                 state_dim=7
-                 ):
-        """
-        input_dim: Dim of actions.
-        global_cond_dim: Dim of global conditioning applied with FiLM
-          in addition to diffusion step embedding. This is usually obs_horizon * obs_dim
-        diffusion_step_embed_dim: Size of positional encoding for diffusion iteration k
-        down_dims: Channel size for each UNet level.
-          The length of this array determines numebr of levels.
-        kernel_size: Conv kernel size
-        n_groups: Number of groups for GroupNorm
-        """
+    """
+    Conditional 1D UNet for diffusion models.
 
+    Args:
+        input_dim: Dimension of the input actions.
+        global_cond_dim: Dimension of global conditioning applied with FiLM.
+        diffusion_step_embed_dim: Size of positional encoding for diffusion iteration k.
+        down_dims: Channel size for each UNet level.
+        kernel_size: Convolutional kernel size.
+        n_groups: Number of groups for GroupNorm.
+        state_dim: Dimension of the state input.
+    """
+    def __init__(self, input_dim, global_cond_dim, diffusion_step_embed_dim=256,
+                 down_dims=[256, 512, 1024], kernel_size=5, n_groups=8, state_dim=7):
         super().__init__()
         all_dims = [input_dim] + list(down_dims)
         start_dim = down_dims[0]
 
         self.global_1d_pool = nn.AdaptiveAvgPool1d(1)
         self.norm_after_pool = nn.LayerNorm(global_cond_dim)
-        self.combine = nn.Linear(global_cond_dim+state_dim, global_cond_dim)
+        self.combine = nn.Linear(global_cond_dim + state_dim, global_cond_dim)
 
         dsed = diffusion_step_embed_dim
         diffusion_step_encoder = nn.Sequential(
@@ -216,14 +250,20 @@ class ConditionalUnet1D(nn.Module):
                 global_cond=None,
                 states=None):
         """
-        x: (B,T,input_dim)
-        timestep: (B,) or int, diffusion step
-        global_cond: (B,global_cond_dim)
-        output: (B,T,input_dim)
+        Forward pass for the Conditional UNet.
+
+        Args:
+            sample: Input tensor of shape (B, T, input_dim).
+            timestep: Diffusion step, can be a tensor or an integer.
+            global_cond: Global conditioning tensor of shape (B, global_cond_dim).
+            states: Optional state tensor.
+
+        Returns:
+            Output tensor of shape (B, T, input_dim).
         """
-        # (B,T,C)
+        # move axis for processing
         sample = sample.moveaxis(-1, -2)
-        # (B,C,T)
+        # process global conditioning
         global_cond = self.global_1d_pool(global_cond.permute(0, 2, 1)).squeeze(-1)
         global_cond = self.norm_after_pool(global_cond) # layernorm
         global_cond = torch.cat([global_cond, states], dim=-1) if states is not None else global_cond

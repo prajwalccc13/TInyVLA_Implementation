@@ -10,6 +10,24 @@ from llava_pythia.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_T
 
 
 def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, load_4bit=False, device_map="cuda", device="cuda"):
+    """
+    Loads a pretrained model with optional quantization and device mapping.
+
+    Args:
+        - model_path (str): Path to the model directory or file.
+        - model_base (str): Base model path, used when loading LoRA models.
+        - model_name (str): Name of the model to load.
+        - load_8bit (bool): Whether to load the model in 8-bit precision.
+        - load_4bit (bool): Whether to load the model in 4-bit precision.
+        - device_map (str): Device map for model loading, default is "cuda".
+        - device (str): Device to load the model onto, default is "cuda".
+
+    Returns:
+        - tokenizer: The tokenizer associated with the model.
+        - model: The loaded model.
+        - image_processor: The image processor if applicable.
+        - context_len (int): The context length of the model.
+    """
     kwargs = {"device_map": device_map}
     if load_8bit:
         kwargs['load_in_8bit'] = True

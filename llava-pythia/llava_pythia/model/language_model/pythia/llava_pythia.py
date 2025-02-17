@@ -23,6 +23,11 @@ class LLavaPythiaModel(LlavaMetaModel, GPTNeoXModel):
 
 
 class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
+    """
+    LlavaPythiaForCausalLM is a class that extends GPTNeoXPreTrainedModel and LlavaMetaForCausalLM.
+    It is designed to handle causal language modeling tasks with additional capabilities for processing
+    multimodal inputs, such as images, and generating actions based on different head types.
+    """
     config_class = LlavaPythiaConfig
 
     # _tied_weights_keys = ["embed_out.weight"]
@@ -82,11 +87,21 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
         return image_features
 
     def get_image_fusion_embedding(self, visual_concat=None, images=None, images_r=None, images_top=None, states=None):
+        """
+        Fuses image features based on the specified visual concatenation method.
+
+        Args:
+            visual_concat: Method for concatenating visual features.
+            images: Main images to be encoded.
+            images_r: Right-side images for concatenation.
+            images_top: Top-side images for concatenation.
+            states: Additional state information.
+
+        Returns:
+            Fused image features.
+        """
         if "channel_cat" not in visual_concat:
             image_features = self.encode_images(images)
-        # print("!"*50)
-        # print(visual_concat)
-        # print(images_r.shape)
         if images_top is not None:
             image_features_top = self.encode_images(images_top)
         if images_r is not None:
@@ -131,6 +146,30 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             is_pad=None,
             eval=False,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
+        """
+        Forward pass for the LlavaPythiaForCausalLM model.
+
+        Args:
+            input_ids: Input token IDs.
+            attention_mask: Mask to avoid performing attention on padding token indices.
+            past_key_values: Past key values for caching.
+            inputs_embeds: Input embeddings.
+            labels: Labels for computing the loss.
+            use_cache: Whether to use cache.
+            output_attentions: Whether to output attentions.
+            output_hidden_states: Whether to output hidden states.
+            images: Input images for multimodal processing.
+            return_dict: Whether to return a dictionary or a tuple.
+            actions: Target actions for training.
+            states: Additional state information.
+            images_r: Right-side images for concatenation.
+            images_top: Top-side images for concatenation.
+            is_pad: Mask indicating padded regions.
+            eval: Evaluation mode flag.
+
+        Returns:
+            A tuple or CausalLMOutputWithPast containing the model outputs.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

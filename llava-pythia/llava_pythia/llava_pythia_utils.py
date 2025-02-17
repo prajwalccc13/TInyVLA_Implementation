@@ -14,6 +14,17 @@ from llava_pythia.model import *
 import os
 
 def find_all_linear_names(model, rank0_print, lora_module=None):
+    """
+    Identifies all linear module names in the model that are relevant for LoRA (Low-Rank Adaptation).
+
+    Args:
+        model: The model to search for linear modules.
+        rank0_print: A function for printing messages, typically used for logging.
+        lora_module: Optional; specifies which modules are considered for LoRA.
+
+    Returns:
+        A list of names of linear modules that are relevant for LoRA.
+    """
     cls = torch.nn.Linear
     lora_module_names = set()
     # multimodal_keywords = ['mm_projector', 'vision_tower', 'vision_resampler']
@@ -61,6 +72,18 @@ def find_all_linear_names(model, rank0_print, lora_module=None):
     return list(lora_module_names)
 
 def load_llava_pythia(config=None, llava_pythia_config=None, rank0_print=print, tokenizer=None):
+    """
+    Loads the Llava-Pythia model with optional pre-trained weights and configurations.
+
+    Args:
+        config: Configuration dictionary containing model, training, and data arguments.
+        llava_pythia_config: Specific configuration for the Llava-Pythia model.
+        rank0_print: Function for logging, defaults to print.
+        tokenizer: Optional tokenizer to be used with the model.
+
+    Returns:
+        A tuple containing the loaded model and data arguments.
+    """
     model_args = config['model_args']
     training_args = config['training_args']
     data_args = config['data_args']
@@ -269,6 +292,17 @@ def load_llava_pythia(config=None, llava_pythia_config=None, rank0_print=print, 
     return model, data_args
 
 def maybe_zero_3(param, ignore_status=False, name=None):
+    """
+    Handles parameter gathering for models using DeepSpeed's ZeRO-3 optimization.
+
+    Args:
+        param: The parameter to gather.
+        ignore_status: If True, ignores the parameter status.
+        name: Optional name for logging purposes.
+
+    Returns:
+        A detached and cloned version of the parameter on the CPU.
+    """
     from deepspeed import zero
     from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
     if hasattr(param, "ds_id"):
@@ -284,6 +318,16 @@ def maybe_zero_3(param, ignore_status=False, name=None):
 
 # Borrowed from peft.utils.get_peft_model_state_dict
 def get_peft_state_maybe_zero_3(named_params, bias):
+    """
+    Retrieves the state dictionary for PEFT (Parameter-Efficient Fine-Tuning) models, considering ZeRO-3.
+
+    Args:
+        named_params: Named parameters of the model.
+        bias: Specifies which biases to include ('none', 'all', 'lora_only').
+
+    Returns:
+        A dictionary of parameters relevant to PEFT, gathered if necessary.
+    """
     if bias == "none":
         to_return = {k: t for k, t in named_params if "lora_" in k}
     elif bias == "all":
@@ -309,6 +353,16 @@ def get_peft_state_maybe_zero_3(named_params, bias):
 
 
 def get_peft_state_non_lora_maybe_zero_3(named_params, require_grad_only=True):
+    """
+    Retrieves non-LoRA parameters for PEFT models, considering ZeRO-3.
+
+    Args:
+        named_params: Named parameters of the model.
+        require_grad_only: If True, only includes parameters that require gradients.
+
+    Returns:
+        A dictionary of non-LoRA parameters, gathered if necessary.
+    """
     to_return = {k: t for k, t in named_params if "lora_" not in k}
     if require_grad_only:
         to_return = {k: t for k, t in to_return.items() if t.requires_grad}
@@ -317,14 +371,32 @@ def get_peft_state_non_lora_maybe_zero_3(named_params, require_grad_only=True):
 
 
 def get_mm_adapter_state_maybe_zero_3(named_params, keys_to_match):
+    """
+    Retrieves the state dictionary for multi-modal adapters, considering ZeRO-3.
+
+    Args:
+        named_params: Named parameters of the model.
+        keys_to_match: Keys to identify relevant parameters.
+
+    Returns:
+        A dictionary of parameters for multi-modal adapters, gathered if necessary.
+    """
     to_return = {k: t for k, t in named_params if any(key_match in k for key_match in keys_to_match)}
     to_return = {k: maybe_zero_3(v, ignore_status=True).cpu() for k, v in to_return.items()}
     return to_return
 
 def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
                                    output_dir: str):
-    """Collects the state dict and dump to disk."""
+    """
+    Safely saves the model state for a Hugging Face Trainer.
 
+    Args:
+        trainer: The Hugging Face Trainer instance.
+        output_dir: Directory where the model state should be saved.
+
+    Returns:
+        None
+    """
     if trainer.deepspeed:
         torch.cuda.synchronize()
         trainer.save_model(output_dir)
@@ -345,9 +417,16 @@ def smart_tokenizer_and_embedding_resize(
         tokenizer: transformers.PreTrainedTokenizer,
         model: transformers.PreTrainedModel,
 ):
-    """Resize tokenizer and embedding.
+    """
+    Resizes the tokenizer and model embeddings to accommodate new special tokens.
 
-    Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
+    Args:
+        special_tokens_dict: Dictionary of special tokens to add.
+        tokenizer: The tokenizer to resize.
+        model: The model whose embeddings need resizing.
+
+    Returns:
+        None
     """
     num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
     model.resize_token_embeddings(len(tokenizer))

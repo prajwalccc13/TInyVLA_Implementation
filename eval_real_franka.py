@@ -18,7 +18,19 @@ from einops import rearrange
 import torch_utils as TorchUtils
 import matplotlib.pyplot as plt
 import sys
+
 def get_image(ts, camera_names, rand_crop_resize=False):
+    """
+    Retrieves and processes images from the specified cameras.
+
+    Args:
+        ts: The timestamp or data structure containing observations.
+        camera_names: List of camera names to retrieve images from.
+        rand_crop_resize: Boolean indicating whether to apply random crop and resize.
+
+    Returns:
+        A tensor containing the processed images.
+    """
     curr_images = []
     for cam_name in camera_names:
         curr_image = rearrange(ts.observation['images'][cam_name], 'h w c -> c h w')
@@ -40,6 +52,17 @@ def get_image(ts, camera_names, rand_crop_resize=False):
 
 
 def pre_process(robot_state_value, key, stats):
+    """
+    Pre-processes the robot state value using provided statistics.
+
+    Args:
+        robot_state_value: The raw robot state value.
+        key: The key to access the corresponding statistics.
+        stats: Dictionary containing mean and standard deviation for normalization.
+
+    Returns:
+        The normalized robot state value.
+    """
     tmp = robot_state_value
     tmp = (tmp - stats[key + '_mean']) / stats[key + '_std']
     return tmp
@@ -47,8 +70,10 @@ def pre_process(robot_state_value, key, stats):
 
 def get_obs():
     """
-    This function is used to get observations(images and robot states) in your robot environment.
-    And you need to resize the images into the [320, 180] which is correspongding to training.
+    Retrieves observations (images and robot states) from the robot environment.
+
+    Returns:
+        A tuple containing images and states.
     """
     return None, None # images, states
 
@@ -76,6 +101,12 @@ def convert_actions(pred_action):
     return pred_action
 
 class llava_pythia_act_policy:
+    """
+    Policy class for Llava-Pythia action generation.
+
+    Attributes:
+        policy_config: Configuration dictionary for the policy.
+    """
     def __init__(self, policy_config, data_args=None):
         super(llava_pythia_act_policy).__init__()
         self.load_policy(policy_config)
@@ -95,6 +126,17 @@ class llava_pythia_act_policy:
         self.config = LlavaPythiaConfig.from_pretrained('/'.join(model_path.split('/')[:-1]), trust_remote_code=True)
 
     def process_batch_to_llava(self, curr_image, robo_state, raw_lang):
+        """
+        Processes a batch of data for Llava-Pythia model input.
+
+        Args:
+            curr_image: Current image tensor.
+            robo_state: Current robot state tensor.
+            raw_lang: Raw language input.
+
+        Returns:
+            A dictionary containing processed data for the model.
+        """
         self.conv = conv_templates[self.policy_config['conv_mode']].copy()
 
         if len(curr_image.shape) == 5: # 1,2,3,270,480
@@ -164,7 +206,21 @@ class llava_pythia_act_policy:
         return expanded_imgs
 
 
-def eval_bc(policy, deploy_env,policy_config, save_episode=True, num_rollouts=1, raw_lang=None):
+def eval_bc(policy, deploy_env, policy_config, save_episode=True, num_rollouts=1, raw_lang=None):
+    """
+    Evaluates the behavior cloning policy in the deployment environment.
+
+    Args:
+        policy: The policy to evaluate.
+        deploy_env: The deployment environment.
+        policy_config: Configuration dictionary for the policy.
+        save_episode: Whether to save the episode data.
+        num_rollouts: Number of rollouts to perform.
+        raw_lang: Raw language input for the policy.
+
+    Returns:
+        None
+    """
     assert raw_lang is not None, "raw lang is None!!!!!!"
     set_seed(0)
 
@@ -195,7 +251,6 @@ def eval_bc(policy, deploy_env,policy_config, save_episode=True, num_rollouts=1,
     if temporal_agg:
         query_frequency = 1
         num_queries = policy.config['chunk_size']
-
 
     max_timesteps = int(10000)  # may increase for real-world tasks
 
