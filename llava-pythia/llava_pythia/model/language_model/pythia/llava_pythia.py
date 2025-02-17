@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional, Tuple, Union
-from detr.models import build_ACT_head
+from policy_heads.models import build_ACT_head
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
@@ -20,14 +20,6 @@ class LLavaPythiaModel(LlavaMetaModel, GPTNeoXModel):
 
     def __init__(self, config):
         super(LLavaPythiaModel, self).__init__(config)
-
-
-def check_weights(model, threshold=1e6):
-    large_weights = []
-    for name, param in model.named_parameters():
-        if param.abs().max() > threshold:
-            large_weights.append((name, param))
-    return large_weights
 
 
 class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
@@ -55,7 +47,7 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
 
         elif config.action_head_type == 'droid_diffusion':
             from diffusers.schedulers.scheduling_ddim import DDIMScheduler
-            from detr.models import ConditionalUnet1D
+            from policy_heads.models import ConditionalUnet1D
             self.proj_to_action = nn.Identity()
             self.noise_scheduler = DDIMScheduler(
                 num_train_timesteps=100,
@@ -97,15 +89,18 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
         # print(images_r.shape)
         if images_top is not None:
             image_features_top = self.encode_images(images_top)
-        if images_r != None:
+        if images_r is not None:
 
             if visual_concat == 'token_cat':
                 image_features_r = self.encode_images(images_r)
+                # Concatenate right-side features
                 image_features = torch.cat([image_features, image_features_r], dim=1)
                 if images_top is not None:
+                    # Concatenate top-side features
                     image_features = torch.cat([image_features, image_features_top], dim=1)
             else:
                 raise ValueError(f"Unimplentmented concat style:{visual_concat}")
+        # Return final concatenated features
         return image_features
 
     def get_output_embeddings(self):
@@ -175,9 +170,8 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             else:
                 action = self.forward_diffusion_head(actions, hidden_states, states, is_pad)
                 return action
-        # print("#Q"*30)
+        # return outputs as a tuple instead of a structured dictionary
         if not return_dict:
-            # print(f"!@#@#@#@#@#$#$#####$$$$$$$@#@##@##@#@#@###############@#@#@#@@@@@@@@@@@@@@{return_dict}@@@@@@@@@@@@")
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
@@ -203,7 +197,7 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
                 - loss (torch.Tensor or None): The computed loss if applicable.
                 - logits (torch.Tensor): The predicted output logits.
         """
-        logits = self.embed_out(input_feature=hidden_states, state_tensor=states)  # states 机器人状态信息
+        logits = self.embed_out(input_feature=hidden_states, state_tensor=states)
 
         loss = None
         if labels is not None and actions is None: # training time
@@ -351,29 +345,6 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
                 ).prev_sample
 
             return naction
-
-
-    def prepare_inputs_for_generation(
-            self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
-    ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "images": kwargs.get("images", None),
-            }
-        )
-        return model_inputs
 
 
 AutoConfig.register("llava_pythia", LlavaPythiaConfig)

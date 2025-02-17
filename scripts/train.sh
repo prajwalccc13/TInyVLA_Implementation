@@ -16,7 +16,7 @@ cp ./scripts/train.sh $OUTPUT
 
 # detailed usage of each parameter can be found in train_tinyvla.py
 
-deepspeed --master_port 29600 --num_gpus=8 --num_nodes=1 ./train_act_pythia.py \
+deepspeed --master_port 29600 --num_gpus=8 --num_nodes=1 ./train_tinyvla.py \
   --deepspeed scripts/zero2.json \
   --lora_enable True \
   --lora_module 'vit llm' \

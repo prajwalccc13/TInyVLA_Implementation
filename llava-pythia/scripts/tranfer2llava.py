@@ -1,4 +1,4 @@
-## 将原始的R3M格式的franka kitchen数据转成llava格式
+# Convert the R3M-formatted Franka kitchen data to the LLaVA format
 output_path = "/media/rl/HDD/data/data/franka_kitchen/frankakitchen_llava"
 import pickle
 import json
@@ -57,7 +57,7 @@ def franka_kitchen2llava_format(data_path:str, ratio:float, view):
         for idx, each in enumerate(demo_paths[:int(ratio*200)]): # trajectory id 
             traj_len = each['images'].shape[0]
             
-            # 标准化action和state###########
+            # normalize action and state
             m_a,v_a = np.array([mean_std['action'][p.split('/')[-1]]['mean']]), np.array([mean_std['action'][p.split('/')[-1]]['var']])
             m_s,v_s = np.array([mean_std['state'][p.split('/')[-1]]['mean']]), np.array([mean_std['state'][p.split('/')[-1]]['var']])
             each['actions'] = (each['actions'] - m_a) /np.sqrt(v_a)
@@ -128,8 +128,6 @@ def franka_kitchen2llava_format(data_path:str, ratio:float, view):
 #         print(mean_state, var_state)
     # print(mean_std)
     
-    
-    # 保存计算得到的各个任务的均值和方差，不同视角对应的都是一样的
     # with open(f'mean_var_{view}.json', 'w') as f:
     #     json.dump(mean_std,f)
     

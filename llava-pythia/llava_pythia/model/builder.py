@@ -21,7 +21,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type='nf4'
         )
-    else:  # TODO: after fine-tuning LLava-Phi, load the model weights with fp16 will pose nan
+    else:
         kwargs['torch_dtype'] = torch.float16
 
     if 'pythia' in model_name.lower():
@@ -138,5 +138,4 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
         context_len = 2048
     model.to(device="cuda")
     print(kwargs)
-    # print(model)
     return tokenizer, model, image_processor, context_len

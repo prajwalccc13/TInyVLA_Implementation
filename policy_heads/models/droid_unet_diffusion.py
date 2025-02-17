@@ -150,7 +150,7 @@ class ConditionalUnet1D(nn.Module):
 
         dsed = diffusion_step_embed_dim
         diffusion_step_encoder = nn.Sequential(
-            SinusoidalPosEmb(dsed, torch.float16),
+            SinusoidalPosEmb(dsed, torch.bfloat16),
             nn.Linear(dsed, dsed * 4),
             nn.Mish(),
             nn.Linear(dsed * 4, dsed),
@@ -228,7 +228,7 @@ class ConditionalUnet1D(nn.Module):
         global_cond = self.norm_after_pool(global_cond) # layernorm
         global_cond = torch.cat([global_cond, states], dim=-1) if states is not None else global_cond
         global_cond = self.combine(global_cond)
-        # 1. time
+        
         timesteps = timestep
         if not torch.is_tensor(timesteps):
             timesteps = torch.tensor([timesteps], dtype=torch.long, device=sample.device)

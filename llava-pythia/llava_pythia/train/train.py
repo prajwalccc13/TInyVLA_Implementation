@@ -16,7 +16,7 @@
 
 import os
 
-os.environ["WANDB_API_KEY"] = 'd6e5b41560c076da37ebe634ad8dcf2a6f6f17d3'
+os.environ["WANDB_API_KEY"] = ''
 os.environ["WANDB_MODE"] = "offline"
 
 import copy
@@ -96,11 +96,11 @@ class TrainingArguments(transformers.TrainingArguments):
     tune_mm_mlp_adapter: bool = field(default=False)
     
     # logger
-    logging_dir: str=field(default='./logs')            # TensorBoard日志的保存目录
-    logging_strategy: str=field(default='steps')        # 设置为`steps`表示每几步记录一次日志
+    logging_dir: str=field(default='./logs')            # Directory to save TensorBoard logs
+    logging_strategy: str=field(default='steps')        # Set `steps` to indicate how many steps between each log
     logging_steps: int=field(default=10)  
     
-    save_steps: int=field(default=10)                  # 每隔多少步保存一次模型
+    save_steps: int=field(default=10)                  # Save model every few steps
     num_train_epochs: int=field(default=3)
     
     # validate
@@ -347,8 +347,6 @@ def preprocess_multimodal(
 
     return sources
 
-
-# TODO
 def preprocess_v0(
         sources,
         tokenizer: transformers.PreTrainedTokenizer,
@@ -733,7 +731,7 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
     #                                       data_path=data_args.data_path,
     #                                       data_args=data_args)
     # data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
-    train_eval_split = 0.9 # 训练占0.9，评估占0.1
+    train_eval_split = 0.9 
     # print("$"*50)
     # print(concat)
     train_dataset = LazySupervisedDataset(tokenizer=tokenizer,
@@ -963,9 +961,6 @@ def train():
     #     trainer.train(resume_from_checkpoint=True)
     # else:
     #     trainer.train()
-
-    # TODO I dont like auto resume << REMOVE IT AND UNCOMMENT THE ABOVE CODE
-    # print("Total training steps:", trainer.state.total_steps)
 
     trainer.train()
 

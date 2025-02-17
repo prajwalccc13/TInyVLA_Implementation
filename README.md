@@ -14,11 +14,15 @@ for Robotic Manipulation</h1>
 * **`Nov. 19th, 2024`**: **TinyVLA** is out! **Paper** can be found [here](https://arxiv.org/abs/2409.12514). The **project web** can be found [here](https://tiny-vla.github.io/).
 
 ## Contents
+- [📰 News](#-news)
+- [Contents](#contents)
 - [Install](#install)
 - [Data Preparation](#data-preparation)
-- [Download Pretrained VLM](#Download-Pretrained-VLM)
+- [Download Pretrained VLM](#download-pretrained-vlm)
 - [Train](#train)
 - [Evaluation](#evaluation)
+- [Acknowledgement](#acknowledgement)
+- [Citation](#citation)
 
 ## Install
 
@@ -33,7 +37,7 @@ conda create -n tinyvla python=3.10 -y
 conda activate tinyvla
 pip install --upgrade pip  # 
 pip install -r requirements.txt
-cd detr
+cd policy_heads
 pip install -e . 
 # install llava-pythia
 cd ../llava-pythia
@@ -76,10 +80,10 @@ We construct the VLM backbone by integrating a series of tiny LLM([Pythia](https
 
 ## Train
 The training script is "scripts/train.sh". And you need to change following parameters:
-1. **OUTPUT** :refers to the save dir for training
+1. **OUTPUT** :refers to the save directory for training, which must include the keyword "llava_pythia" (and optionally "lora"). If LoRA training is used, the name must include "lora" (e.g., "llava_pythia_lora").
 2. **task_name** :refers to the tasks used for training, which should be corresponded to "your_task_name" in aloha_scripts/constant.py
 3. **model_name_or_path** :path to the pretrained VLM weights
-Other hyperparameters like "batch_size", "save_steps" could be customized according to your computation resources.
+4. Other hyperparameters like "batch_size", "save_steps" could be customized according to your computation resources.
 
 Start training by following commands:
 ```shell

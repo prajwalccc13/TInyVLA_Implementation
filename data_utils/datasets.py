@@ -18,7 +18,33 @@ def flatten_list(l):
     return [item for sublist in l for item in sublist]
 
 class EpisodicDataset(torch.utils.data.Dataset):
+    """
+    It supports loading multi-camera images, actions, and robot states for each time step in an episode,
+    with optional augmentations and normalization. The data is loaded from HDF5 files, and padding is applied
+    to ensure consistent episode lengths.
+    """
     def __init__(self, dataset_path_list, camera_names, norm_stats, episode_ids, episode_len, chunk_size, policy_class, llava_pythia_process=None, imsize=480):
+        """
+        Initializes the EpisodicDataset class with the given parameters.
+        
+        Args:
+            dataset_path_list (list of str): A list of file paths to the dataset files (e.g., HDF5 files), 
+                                              each corresponding to a different episode.
+            camera_names (list of str): A list of camera names (e.g., ['top', 'left', 'right']) indicating the 
+                                        cameras whose images are collected for each episode.
+            norm_stats (dict): A dictionary containing normalization statistics, including:
+                               - "action_mean" and "action_std" for normalizing actions,
+                               - "qpos_mean" and "qpos_std" for normalizing robot states (qpos).
+            episode_ids (list of int): A list of episode IDs that correspond to each entry in `dataset_path_list`. 
+                                       Each episode ID helps in locating the dataset file for that specific episode.
+            episode_len (list of int): A list of integers representing the lengths of each episode (number of time steps).
+                                       Used for calculating cumulative lengths and indexing.
+            chunk_size (int): The number of time steps (or data points) to return in each sample when the dataset is accessed.
+            policy_class (str): A string indicating the type of policy being used (e.g., "ACT", "diffusion").
+            llava_pythia_process (optional): An optional process or model for further processing the data after it is loaded.
+                                              This can be set to `None` if no additional processing is required.
+            imsize (int, default=480): The image size to which the images should be resized. Default is 480 pixels.
+        """
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_path_list = dataset_path_list
@@ -42,6 +68,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         if len(a['image_top'].shape) == 4:
             print("%"*40)
             print("There are three views: left, right, top")
+        # is_sim indicates whether the data comes from a simulation environment.
         self.is_sim = False
 
     def __len__(self):
@@ -72,6 +99,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
             original_action_shape = action.shape
             episode_len = original_action_shape[0]
 
+            # qpos represents the robot's position (e.g., joint angles) at the given timestamp (start_ts),
+            # qvel represents the robot's velocity (e.g., joint velocities) at the same timestamp.
             # get observation at start_ts only
             qpos = root['/observations/qpos'][start_ts]
             qvel = root['/observations/qvel'][start_ts]
@@ -94,7 +123,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 action = action[max(0, start_ts - 1):] # hack, to make timesteps more aligned
                 action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
 
-        # self.is_sim = is_sim
         padded_action = np.zeros((self.max_episode_len, original_action_shape[1]), dtype=np.float32)
         padded_action[:action_len] = action
         is_pad = np.zeros(self.max_episode_len)
@@ -115,12 +143,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
         action_data = torch.from_numpy(padded_action).float()
         is_pad = torch.from_numpy(is_pad).bool()
 
+        # convert the image data from BGR to RGB format 
         if 'top' in self.camera_names:
             image_data = torch.stack([torch.from_numpy(cv2.cvtColor(img.numpy(), cv2.COLOR_BGR2RGB)) for img in image_data], dim=0)
 
         # channel last
         image_data = torch.einsum('k h w c -> k c h w', image_data)
-
 
         # augmentation
         if self.transformations is None:
