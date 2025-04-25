@@ -385,8 +385,8 @@ if __name__ == '__main__':
     #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>hyper parameters<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     action_head = 'droid_diffusion' # specify the action head type
     policy_config = {
-        "model_path": f"/path/to/trained/VLA", # mainly includes the lora weights
-        "model_base": f"/path/to/pretrained/VLM", # used for lora merge weights
+        "model_path": f"./", # mainly includes the lora weights
+        "model_base": f"./", # used for lora merge weights
         "enable_lora": True,
         "conv_mode": "pythia",
         "action_head": action_head,
