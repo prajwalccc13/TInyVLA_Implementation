@@ -386,7 +386,7 @@ if __name__ == '__main__':
     #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>hyper parameters<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     action_head = 'droid_diffusion' # specify the action head type
     policy_config = {
-        "model_path": f"pythia-down/Llava-Pythia-400M/config.json", # mainly includes the lora weights
+        "model_path": f"pythia-down/Llava-Pythia-400M", # mainly includes the lora weights
         "model_base": f"pythia-down/Llava-Pythia-400M/config.json", # used for lora merge weights
         "enable_lora": True,
         "conv_mode": "pythia",
