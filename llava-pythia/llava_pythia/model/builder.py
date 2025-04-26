@@ -5,12 +5,12 @@ import shutil
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig, CLIPImageProcessor, SiglipImageProcessor, GPTNeoXModel, GPTNeoXPreTrainedModel
     
 import torch
-from . import *
+from llava_pythia.model import *
 # from llava_pythia.model import LlavaPythiaConfig
 # from llava_pythia.model import LlavaPythiaForCausalLM
 
-from .language_model.pythia.configuration_llava_pythia import LlavaPythiaConfig
-from .language_model.pythia.llava_pythia import LlavaPythiaForCausalLM
+# from .language_model.pythia.configuration_llava_pythia import LlavaPythiaConfig
+# from .language_model.pythia.llava_pythia import LlavaPythiaForCausalLM
 
 
 from llava_pythia.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
