@@ -2,7 +2,7 @@ import os
 import warnings
 import shutil
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig, CLIPImageProcessor, SiglipImageProcessor, GPTNeoXModel, GPTNeoXPreTrainedModel, GPTNeoXTokenizerFast
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig, CLIPImageProcessor, SiglipImageProcessor, GPTNeoXModel, GPTNeoXPreTrainedModel
     
 import torch
 from llava_pythia.model import *
@@ -97,7 +97,7 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
         elif model_base is not None:
             # this may be mm projector only
             print('Loading LLaVA-Pythia from base model...')
-            tokenizer = GPTNeoXTokenizerFast.from_pretrained(model_base, use_fast=False)
+            tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
             cfg_pretrained = AutoConfig.from_pretrained(model_path)
             model = LlavaPythiaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
 
