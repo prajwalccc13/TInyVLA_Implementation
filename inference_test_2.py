@@ -125,6 +125,7 @@ class llava_pythia_act_policy:
                                                                                                     False)
         self.config = LlavaPythiaConfig.from_pretrained('/'.join(model_path.split('/')[:-1]), trust_remote_code=True)
 
+
     def process_batch_to_llava(self, curr_image, robo_state, raw_lang):
         """
         Processes a batch of data for Llava-Pythia model input.
