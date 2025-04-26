@@ -8,6 +8,10 @@ import torch
 from . import *
 # from llava_pythia.model import LlavaPythiaConfig
 # from llava_pythia.model import LlavaPythiaForCausalLM
+
+from llava_pythia.model.language_model.pythia.llava_pythia import LlavaPythiaConfig
+from llava_pythia.model.language_model.pythia.llava_pythia import LlavaPythiaConfig
+
 from llava_pythia.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 
 
