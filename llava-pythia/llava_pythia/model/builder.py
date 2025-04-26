@@ -2,7 +2,7 @@ import os
 import warnings
 import shutil
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig, CLIPImageProcessor, SiglipImageProcessor, GPTNeoXModel, GPTNeoXPreTrainedModel, GPTNeoXTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig, CLIPImageProcessor, SiglipImageProcessor, GPTNeoXModel, GPTNeoXPreTrainedModel
     
 import torch
 from llava_pythia.model import *
