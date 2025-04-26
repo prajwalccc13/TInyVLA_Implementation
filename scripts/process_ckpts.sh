@@ -4,9 +4,9 @@ LLM_MODEL_SIZE=410M
 
 
 # path to trained TinyVLA weights
-source_dir="/path/to/trained/VLA/weights"
+source_dir="pythia-down\Llava-Pythia-400M"
 # new path to save weights
-target_dir="/path/to/save/processed/VLA/weights"
+target_dir="model_saved/"
 
 mkdir -p $target_dir
 

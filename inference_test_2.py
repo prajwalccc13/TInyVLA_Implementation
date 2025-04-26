@@ -19,34 +19,14 @@ import torch_utils as TorchUtils
 import matplotlib.pyplot as plt
 import sys
 
-import pickle
-from pathlib import Path
-
-class DummyEnv:
-    def __init__(self):
-        self.step_count = 0
-
-    def get_observation(self):
-        obs = {
-            'images': {
-                'cam_1': np.zeros((270, 480, 3), dtype=np.uint8),
-                'cam_2': np.zeros((270, 480, 3), dtype=np.uint8)
-            }
-        }
-        return obs
-
-    def step(self, action):
-        self.step_count += 1
-        print(f"[Dummy Step] Step #{self.step_count}, Action: {action}")
-        return {}
-
-    def reset(self, randomize=False):
-        print("[DummyEnv] Reset called")
-        self.step_count = 0
-
-def get_image(rand_crop_resize=False):
+def get_image(ts, camera_names, rand_crop_resize=False):
     """
-    return image from specified path
+    Retrieves and processes images from the specified cameras.
+
+    Args:
+        ts: The timestamp or data structure containing observations.
+        camera_names: List of camera names to retrieve images from.
+        rand_crop_resize: Boolean indicating whether to apply random crop and resize.
 
     Returns:
         A tensor containing the processed images.
@@ -54,10 +34,9 @@ def get_image(rand_crop_resize=False):
     # Read the image
     img_path = 'data_sample/sample_1.png'
     curr_image = cv2.imread(img_path)
-    curr_image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    curr_image = np.transpose(img, (2, 0, 1))
-
-    curr_image = torch.from_numpy(img / 255.0).float().cuda().unsqueeze(0)
+    curr_image = cv2.cvtColor(curr_image, cv2.COLOR_BGR2RGB)
+    curr_image = np.transpose(curr_image, (2, 0, 1))
+    curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
 
     if rand_crop_resize:
         print('rand crop resize is used!')
@@ -69,7 +48,6 @@ def get_image(rand_crop_resize=False):
         resize_transform = transforms.Resize(original_size, antialias=True)
         curr_image = resize_transform(curr_image)
         curr_image = curr_image.unsqueeze(0)
-
     return curr_image
 
 
@@ -90,12 +68,19 @@ def pre_process(robot_state_value, key, stats):
     return tmp
 
 
-def get_obs(obs, stats):
-    cam_1 = obs['images']['cam_1']
-    cam_2 = obs['images']['cam_2']
-    img = np.stack([cam_1, cam_2], axis=0)  # 2, H, W, C
-    robot_state = np.zeros(10)  # fake robot state vector
-    return img, robot_state
+def get_obs():
+    """
+    Retrieves observations (images and robot states) from the robot environment.
+
+    Returns:
+        A tuple containing images and states.
+    """
+    return None, None # images, states
+
+
+def time_ms():
+    return time.time_ns() // 1_000_000
+
 
 def convert_actions(pred_action):
     # pred_action = torch.from_numpy(actions)
@@ -114,10 +99,6 @@ def convert_actions(pred_action):
     print(f'4. after convert pred_action: {pred_action}')
 
     return pred_action
-
-def time_ms():
-    return time.time_ns() // 1_000_000
-
 
 class llava_pythia_act_policy:
     """
@@ -223,7 +204,7 @@ class llava_pythia_act_policy:
             expanded_imgs[:, offset:offset + height, :width, :] = pil_imgs.permute(0,2,3,1).cpu().numpy()
         expanded_imgs = torch.tensor(expanded_imgs).to(dtype=pil_imgs.dtype, device=pil_imgs.device) # B H W C
         return expanded_imgs
-    
+
 
 def eval_bc(policy, deploy_env, policy_config, save_episode=True, num_rollouts=1, raw_lang=None):
     """
@@ -400,29 +381,28 @@ def eval_bc(policy, deploy_env, policy_config, save_episode=True, num_rollouts=1
 
     return
 
-
-def create_dummy_stats(path):
-    dummy_stats = {
-        'action_mean': np.zeros(10),
-        'action_std': np.ones(10),
-        'action_min': np.zeros(10),
-        'action_max': np.ones(10)
+if __name__ == '__main__':
+    #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>hyper parameters<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    action_head = 'droid_diffusion' # specify the action head type
+    policy_config = {
+        "model_path": f"process_pythia-down\Llava-Pythia-400M", # mainly includes the lora weights
+        "model_base": f"./", # used for lora merge weights
+        "enable_lora": True,
+        "conv_mode": "pythia",
+        "action_head": action_head,
     }
-    with open(path, 'wb') as f:
-        pickle.dump(dummy_stats, f)
-    print(f"[INFO] Dummy stats saved at: {path}")
+    global im_size
+    im_size = 320 # default 480
+    raw_lang = 'put the tennis ball on the right side into the tennis bucket'
+    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-if __name__ == "__main__":
-    stats_path = Path("dataset_stats.pkl")
-    if not stats_path.exists():
-        create_dummy_stats(stats_path)
+    # make policy
+    policy = llava_pythia_act_policy(policy_config)
 
-    # Example usage
-    env = DummyEnv()
-    env.reset()
-    obs = env.get_observation()
-    with open(stats_path, 'rb') as f:
-        stats = pickle.load(f)
-    img, state = get_obs(obs, stats)
-    print(f"[Dummy Data] Image shape: {img.shape}, State shape: {state.shape}")
+    ############################################################################################################
+    # This is your own robot environment, you should init a new env object
+    deploy_env = None
+    ############################################################################################################
+
+    eval_bc(policy, deploy_env, policy_config, save_episode=True, num_rollouts=1, raw_lang=raw_lang)
 
