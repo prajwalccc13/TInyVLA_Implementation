@@ -387,7 +387,7 @@ if __name__ == '__main__':
     action_head = 'droid_diffusion' # specify the action head type
     policy_config = {
         "model_path": f"lesjie/Llava-Pythia-1.3B", # mainly includes the lora weights
-        "model_base": f"lesjie/Llava-Pythia-1.3B", # used for lora merge weights
+        "model_base": f"datasets_stats.pkl", # used for lora merge weights
         # "model_base": None, # used for lora merge weights
         "enable_lora": True,
         "conv_mode": "pythia",
