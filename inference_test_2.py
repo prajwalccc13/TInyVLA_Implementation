@@ -224,7 +224,7 @@ def eval_bc(policy, deploy_env, policy_config, save_episode=True, num_rollouts=1
     """
     assert raw_lang is not None, "raw lang is None!!!!!!"
     set_seed(0)
-
+    print("Inside evaluation code  -----")
     if policy_config["action_head"] == 'act':
         rand_crop_resize = False
         temporal_agg = True
@@ -387,9 +387,9 @@ if __name__ == '__main__':
     action_head = 'droid_diffusion' # specify the action head type
     policy_config = {
         "model_path": f"lesjie/Llava-Pythia-1.3B", # mainly includes the lora weights
-        "model_base": f"datasets_stats.pkl", # used for lora merge weights
+        "model_base": f"lesjie/Llava-Pythia-1.3B", # used for lora merge weights
         # "model_base": None, # used for lora merge weights
-        "enable_lora": True,
+        "enable_lora": False,
         "conv_mode": "pythia",
         "action_head": action_head,
     }
@@ -399,12 +399,13 @@ if __name__ == '__main__':
     #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
     # make policy
+    print("Loading policy ---")
     policy = llava_pythia_act_policy(policy_config)
-
+    print("Loading policy successful----")
     ############################################################################################################
     # This is your own robot environment, you should init a new env object
-    deploy_env = None
+    deploy_env = dataset_stats.pkl
     ############################################################################################################
 
     eval_bc(policy, deploy_env, policy_config, save_episode=True, num_rollouts=1, raw_lang=raw_lang)
-
+    print("evaluation successful")

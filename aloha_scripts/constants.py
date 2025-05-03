@@ -1,15 +1,15 @@
 
 ##################### Setting of training data #####################################
 
-# DATA_DIR = '/path/to/your/data_dir'
+DATA_DIR = '/Disk1/praj/projects/TInyVLA_Implementation/dataset_test'
 
 TASK_CONFIGS = {
-    'example_task_config': { # for local debug
+    'aloha_fork_pick_pickup': { # for local debug
         'dataset_dir': [
-            "/media/rl/HDD/data/data/act/new_view/8_29_tennis", # task 1
+            DATA_DIR + "/aloha_fork_pick_up_compressed", # task 1
         ],
         'episode_len': 1000,  # 1000,
-        'camera_names': ['left', 'right', 'wrist'] # corresponding to image keys saved in h5py files
+        'camera_names': ['cam_high', 'cam_left_wrist', 'cam_low', 'cam_right_wrist'] # corresponding to image keys saved in h5py files
     },
 }
 ####################################################################################
