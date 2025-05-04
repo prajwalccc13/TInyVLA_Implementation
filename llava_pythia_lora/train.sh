@@ -1,5 +1,5 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=1
+#export CUDA_VISIBLE_DEVICES=1
 ACTION_HEAD=droid_diffusion # specify action policy head type
 # define OUTPUT path
 
@@ -15,7 +15,6 @@ fi
 cp ./scripts/train.sh $OUTPUT
 
 # detailed usage of each parameter can be found in train_tinyvla.py
-
 deepspeed --master_port 29600 --num_gpus=1 --num_nodes=1 ./train_tinyvla.py \
   --deepspeed llava-pythia/scripts/zero2.json \
   --lora_enable True \
@@ -54,9 +53,7 @@ deepspeed --master_port 29600 --num_gpus=1 --num_nodes=1 ./train_tinyvla.py \
   --dataloader_num_workers 8 \
   --lazy_preprocess True \
   --action_head_type $ACTION_HEAD \
-#  --use_state True \
   --concat "token_cat" \
-#  --window_size 6 \
   --report_to tensorboard \
   --logging_dir $OUTPUT/log
 

@@ -176,8 +176,8 @@ DEFAULT_VISUAL_CONFIG = {
 class LlavaPythiaConfig(GPTNeoXConfig):
     model_type = "llava_pythia"
 
-    # def __init__(self, vision_config=None, **kwargs):
-    def __init__(
+    def __init__(self, vision_config=None, **kwargs):
+        """ def __init__(
             self,
             vocab_size=50432,
             hidden_size=2048,
@@ -218,9 +218,9 @@ class LlavaPythiaConfig(GPTNeoXConfig):
             cache_update_freq=10,  # 缓存更新频率
             cache_warmup_steps=5,  # 缓存预热步数
             **kwargs
-    ):
-        self.action_head_type = action_head_type
-        self.action_dim = action_dim
+        ): """
+        #self.action_head_type = action_head_type
+        #self.action_dim = action_dim
         if vision_config is None:
             self.vision_config = DEFAULT_VISUAL_CONFIG
         else:

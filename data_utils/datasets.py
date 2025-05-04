@@ -65,9 +65,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
             self.augment_images = False
         self.transformations = None
         a = self.__getitem__(0) # initialize self.is_sim and self.transformations
-        if len(a['image_top'].shape) == 4:
-            print("%"*40)
-            print("There are three views: left, right, top")
+        if 'top' in self.camera_names:
+            if len(a['image_top'].shape) == 4:
+                print("%"*40)
+                print("There are three views: left, right, top")
         # is_sim indicates whether the data comes from a simulation environment.
         self.is_sim = False
 
@@ -102,8 +103,8 @@ class EpisodicDataset(torch.utils.data.Dataset):
             except:
                 is_sim = False
             compressed = root.attrs.get('compress', False)
-
-            raw_lang = root['language_raw'][0].decode('utf-8')
+            data = root['language_raw']
+            raw_lang = data[0].decode('utf-8') if data.shape else data[()].decode('utf-8')
 
             action = root['/action'][()]
             original_action_shape = action.shape
@@ -116,14 +117,37 @@ class EpisodicDataset(torch.utils.data.Dataset):
             qvel = root['/observations/qvel'][start_ts]
             image_dict = dict()
             for cam_name in self.camera_names:
-                image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                # image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                img_data = root[f'/observations/images/{cam_name}'][start_ts]
+                if isinstance(img_data, np.ndarray) and img_data.ndim == 1 and img_data.dtype == np.uint8:
+                    img = cv2.imdecode(img_data, cv2.IMREAD_COLOR)  # BGR image
+                    if img is None:
+                        raise ValueError(f"Failed to decode image for camera '{cam_name}'")
+                else:
+                    img = img_data  # Already decoded (legacy case)
+                # Resize if needed
+                if img.shape[:2] != (self.imsize, self.imsize):
+                    img = cv2.resize(img, (self.imsize, self.imsize))  # (W, H)
+                #if self.imsize != image_dict[cam_name].shape[1]:
+                #    image_dict[cam_name] = cv2.resize(image_dict[cam_name], (320, 180))
+                if compressed:
+                    if isinstance(img_data, np.ndarray) and img_data.ndim == 1 and img_data.dtype == np.uint8:
+                        img = cv2.imdecode(img_data, cv2.IMREAD_COLOR)
+                        if img is None:
+                            raise ValueError(f"Failed to decode image for camera '{cam_name}'")
+                    else:
+                        raise ValueError(f"Expected compressed image bytes for camera '{cam_name}', but got shape {img_data.shape}")
+                else:
+                    img = img_data                
+                
+                image_dict[cam_name] = img
+                
                 if self.imsize != image_dict[cam_name].shape[1]:
                     image_dict[cam_name] = cv2.resize(image_dict[cam_name], (320, 180))
-
-            if compressed:
-                for cam_name in image_dict.keys():
-                    decompressed_image = cv2.imdecode(image_dict[cam_name], 1)
-                    image_dict[cam_name] = np.array(decompressed_image)
+            #if compressed:
+            ##    for cam_name in image_dict.keys():
+              #      decompressed_image = cv2.imdecode(image_dict[cam_name], 1)
+               #     image_dict[cam_name] = np.array(decompressed_image)
 
             # get all actions after and including start_ts
             if is_sim:
