@@ -389,7 +389,7 @@ if __name__ == '__main__':
         "model_path": f"lesjie/Llava-Pythia-1.3B", # mainly includes the lora weights
         "model_base": f"lesjie/Llava-Pythia-1.3B", # used for lora merge weights
         # "model_base": None, # used for lora merge weights
-        "enable_lora": True,
+        "enable_lora": False,
         "conv_mode": "pythia",
         "action_head": action_head,
     }

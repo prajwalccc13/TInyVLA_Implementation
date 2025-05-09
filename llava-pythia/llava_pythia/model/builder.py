@@ -6,8 +6,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAn
     GPTNeoXModel, GPTNeoXPreTrainedModel
 import torch
 from llava_pythia.model import *
-#from .language_model.pythia.llava_pythia import *
-#from .language_model.pythia.configuration_llava_pythia import *
+from .language_model.pythia.llava_pythia import *
+from .language_model.pythia.configuration_llava_pythia import *
 from llava_pythia.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 
 
